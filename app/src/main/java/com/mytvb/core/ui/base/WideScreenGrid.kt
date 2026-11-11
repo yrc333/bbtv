@@ -1,5 +1,6 @@
 package com.mytvb.core.ui.base
 
+import android.content.res.Configuration
 import android.content.res.Resources
 import kotlin.math.roundToInt
 
@@ -8,6 +9,10 @@ fun Resources.isWideScreen(): Boolean {
     val metrics = displayMetrics
     return metrics.widthPixels >= metrics.heightPixels * 2.8f
 }
+
+/** 竖屏判定：手机/平板竖握时为 true。 */
+fun Resources.isPortrait(): Boolean =
+    configuration.orientation == Configuration.ORIENTATION_PORTRAIT
 
 /**
  * 超宽屏网格列数适配。
@@ -23,7 +28,9 @@ fun Resources.isWideScreen(): Boolean {
  * 退化为固定列数，与历史行为一致。
  */
 fun Resources.adaptiveSpanCount(base: Int = 4, wide: Int = 8): Int {
-    val cols = if (isWideScreen()) wide else base
+    val landscapeCols = if (isWideScreen()) wide else base
+    // 竖屏时可用宽度只剩横屏的一半左右，列数同步减半，避免卡片被压扁
+    val cols = if (isPortrait()) (landscapeCols / 2).coerceAtLeast(2) else landscapeCols
     val span = (cols / UiScale.scale()).roundToInt()
     // 叠加"视频卡片大小"偏移：紧凑 +1 列（更小卡片）、大 -1、特大 -2；任何页面最少保留 2 列
     return (span + UiCardSize.offset()).coerceAtLeast(2)

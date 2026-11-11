@@ -11,6 +11,7 @@ import com.mytvb.databinding.FragmentLiveBaseListBinding
 import com.mytvb.model.live.LiveAreaCategory
 import com.mytvb.model.live.LiveAreaCategoryParent
 import com.mytvb.core.ui.base.BaseFragment
+import com.mytvb.core.ui.base.adaptiveSpanCount
 import com.mytvb.core.ui.base.RecyclerViewFocusRestoreHelper
 import com.mytvb.core.common.ext.toast
 import com.mytvb.network.session.NetworkSessionGateway
@@ -64,7 +65,8 @@ class LiveAreaFragment : BaseFragment<FragmentLiveBaseListBinding>(), LiveTabPag
             onItemClick = ::openAreaDetail,
             onTopEdgeUp = ::focusTopTab
         )
-        binding.recyclerView.layoutManager = WrapContentGridLayoutManager(requireContext(), 8)
+        binding.recyclerView.layoutManager =
+            WrapContentGridLayoutManager(requireContext(), resources.adaptiveSpanCount(base = 8, wide = 8))
         binding.recyclerView.adapter = adapter
         binding.recyclerView.itemAnimator = null
         binding.recyclerView.setHasFixedSize(true)

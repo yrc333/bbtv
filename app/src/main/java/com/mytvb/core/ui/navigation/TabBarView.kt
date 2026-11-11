@@ -1,6 +1,7 @@
 package com.mytvb.core.ui.navigation
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.PorterDuff
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -33,6 +34,10 @@ class TabBarView @JvmOverloads constructor(
     private val tabButtons = mutableListOf<AppCompatImageView>()
     private var currentSelectedIndex = -1
     private var onTabClickListener: OnTabClickListener? = null
+
+    /** 竖屏时导航栏位于底部，焦点方向与横屏（左侧栏）相反。 */
+    private val isPortraitLayout: Boolean
+        get() = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
 
     private val selectedColor: Int
     private val normalColor: Int
@@ -93,15 +98,25 @@ class TabBarView @JvmOverloads constructor(
                 if (event.action != KeyEvent.ACTION_DOWN) {
                     return@setOnKeyListener false
                 }
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        onTabClickListener?.onTabNavigateRight(index) == true
+                if (isPortraitLayout) {
+                    // 竖屏导航栏在底部：左右由 nextFocus 负责，上键进入内容区
+                    when (keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP ->
+                            onTabClickListener?.onTabNavigateRight(index) == true
+                        KeyEvent.KEYCODE_DPAD_DOWN -> true
+                        else -> false
                     }
-                    KeyEvent.KEYCODE_DPAD_LEFT -> true
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (button === buttonSearch) true else false
+                } else {
+                    when (keyCode) {
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            onTabClickListener?.onTabNavigateRight(index) == true
+                        }
+                        KeyEvent.KEYCODE_DPAD_LEFT -> true
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            if (button === buttonSearch) true else false
+                        }
+                        else -> false
                     }
-                    else -> false
                 }
             }
         }
@@ -113,12 +128,22 @@ class TabBarView @JvmOverloads constructor(
             if (event.action != KeyEvent.ACTION_DOWN) {
                 return@setOnKeyListener false
             }
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT -> true
-                KeyEvent.KEYCODE_DPAD_RIGHT -> onTabClickListener?.onSideButtonNavigateRight() ?: false
-                KeyEvent.KEYCODE_DPAD_UP -> false
-                KeyEvent.KEYCODE_DPAD_DOWN -> true
-                else -> false
+            if (isPortraitLayout) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP ->
+                        onTabClickListener?.onSideButtonNavigateRight() == true
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> true
+                    KeyEvent.KEYCODE_DPAD_DOWN -> true
+                    else -> false
+                }
+            } else {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> true
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> onTabClickListener?.onSideButtonNavigateRight() ?: false
+                    KeyEvent.KEYCODE_DPAD_UP -> false
+                    KeyEvent.KEYCODE_DPAD_DOWN -> true
+                    else -> false
+                }
             }
         }
 
@@ -129,12 +154,21 @@ class TabBarView @JvmOverloads constructor(
             if (event.action != KeyEvent.ACTION_DOWN) {
                 return@setOnKeyListener false
             }
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT -> true
-                KeyEvent.KEYCODE_DPAD_RIGHT -> onTabClickListener?.onSideButtonNavigateRight() ?: false
-                KeyEvent.KEYCODE_DPAD_UP -> false
-                KeyEvent.KEYCODE_DPAD_DOWN -> false
-                else -> false
+            if (isPortraitLayout) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP ->
+                        onTabClickListener?.onSideButtonNavigateRight() == true
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> true
+                    else -> false
+                }
+            } else {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> true
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> onTabClickListener?.onSideButtonNavigateRight() ?: false
+                    KeyEvent.KEYCODE_DPAD_UP -> false
+                    KeyEvent.KEYCODE_DPAD_DOWN -> false
+                    else -> false
+                }
             }
         }
     }
@@ -253,7 +287,7 @@ class TabBarView @JvmOverloads constructor(
         return SpatialFocusNavigator.requestBestCandidate(
             anchorView = anchorView,
             candidates = candidates,
-            direction = View.FOCUS_LEFT,
+            direction = if (isPortraitLayout) View.FOCUS_DOWN else View.FOCUS_LEFT,
             fallback = {
                 focusCurrentTab() || candidates.firstOrNull()?.requestFocus() == true
             }

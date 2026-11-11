@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 手机竖屏：导航栏从左侧搬到屏幕底部，内容区占满上方 -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="?attr/backgroundColor"
+    android:fitsSystemWindows="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/mainBackgroundImage"
+        android:visibility="gone"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+
+    <FrameLayout
+        android:id="@+id/container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@+id/divide"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+
+    <View
+        android:id="@+id/divide"
+        android:background="?attr/dividerColor"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        app:layout_constraintBottom_toTopOf="@+id/myTabView"/>
+
+    <com.mytvb.core.ui.navigation.TabBarView
+        android:id="@+id/myTabView"
+        android:layout_width="match_parent"
+        android:layout_height="68dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"/>
+
+    <TextView
+        android:textColor="?android:attr/textColorPrimary"
+        android:id="@+id/textViewDebug"
+        android:visibility="gone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+
+    <!-- 青少年模式：休息期间全屏遮罩 + 倒计时 -->
+    <LinearLayout
+        android:id="@+id/teenRestOverlay"
+        android:visibility="gone"
+        android:background="#FF000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <TextView
+            android:id="@+id/teenRestTitle"
+            android:text="@string/activity_teen_rest_banner"
+            android:textColor="#FFFFFF"
+            android:textSize="@dimen/px48"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="@dimen/px60"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:id="@+id/teenRestCountdown"
+            android:textColor="#FFFFFF"
+            android:textSize="@dimen/px80"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -36,7 +36,7 @@
         <activity
             android:name=".ui.activity.SplashActivity"
             android:exported="true"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="unspecified"
             android:configChanges="screenSize|orientation|keyboardHidden"
             android:theme="@style/Theme.MyBLBL.Launcher"
             tools:ignore="DiscouragedApi">
@@ -47,12 +47,12 @@
             </intent-filter>
         </activity>
 
+        <!-- 手机适配：不锁方向，竖屏时自动使用 layout-port；旋转时重建以重新加载对应布局 -->
         <activity
             android:name=".ui.activity.MainActivity"
             android:exported="false"
             android:launchMode="singleTop"
-            android:screenOrientation="sensorLandscape"
-            android:configChanges="screenSize|orientation|keyboardHidden"
+            android:screenOrientation="unspecified"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.MyBLBL.Main"
             tools:ignore="DiscouragedApi" />

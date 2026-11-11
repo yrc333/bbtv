@@ -247,7 +247,7 @@ abstract class BaseListFragment<MODEL> : BaseFragment<FragmentBaseListBinding>()
         swipeRefreshLayout?.isRefreshing = refreshing
     }
 
-    open fun getSpanCount(): Int = 4
+    open fun getSpanCount(): Int = resources.adaptiveSpanCount(base = 4, wide = 4)
 
     open fun createLayoutManager(): LinearLayoutManager {
         return WrapContentGridLayoutManager(requireContext(), getSpanCount())

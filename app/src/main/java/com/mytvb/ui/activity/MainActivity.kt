@@ -302,6 +302,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         val tag = menuPageTag(entry)
         val target = supportFragmentManager.findFragmentByTag(tag) ?: createMenuPage(entry)
         if (target.isVisible) return
+        val isCachedPage = target.isAdded
 
         // 记录当前页退出前的焦点，下次进入恢复到同一控件
         visibleMenuPage()?.let { (currentEntry, page) ->
@@ -321,7 +322,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 add(R.id.container, target, tag)
             }
         }
-        binding.root.post { requestPageFocus(entry, target) }
+        // 缓存页在同一帧内直接恢复焦点；新页面交给自身的首焦逻辑，避免抢焦
+        if (!requestPageFocus(entry, target) && isCachedPage) {
+            binding.root.post { requestPageFocus(entry, target) }
+        }
     }
 
     private fun createMenuPage(entry: MainMenuFragment.Entry): Fragment = when (entry) {
@@ -363,24 +367,31 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                 add(R.id.container, MainMenuFragment.newInstance(), MENU_TAG)
             }
         }
+        // 同一帧内直接落焦：避免系统先恢复到首项、下一帧再跳到目标项，造成两段高亮闪烁
+        val menuFragment = supportFragmentManager.findFragmentByTag(MENU_TAG) as? MainMenuFragment
+        if (menuFragment?.focusItem(entry) == true) {
+            return
+        }
         binding.root.post {
-            val menuFragment = supportFragmentManager.findFragmentByTag(MENU_TAG) as? MainMenuFragment
-            if (menuFragment?.focusItem(entry) != true) {
+            val fallbackMenu = supportFragmentManager.findFragmentByTag(MENU_TAG) as? MainMenuFragment
+            if (fallbackMenu?.focusItem(entry) != true) {
                 focusMenu()
             }
         }
     }
 
-    private fun requestPageFocus(entry: MainMenuFragment.Entry, page: Fragment) {
-        val tag = menuPageTag(entry)
-        val saved = pageFocusAnchors[tag]?.get()
+    /** 恢复功能页内的焦点；返回是否已成功落到页面内。 */
+    private fun requestPageFocus(entry: MainMenuFragment.Entry, page: Fragment): Boolean {
+        val saved = pageFocusAnchors[menuPageTag(entry)]?.get()
         if (saved != null && saved.isAttachedToWindow && saved.isShown && saved.requestFocus()) {
-            return
+            return true
         }
-        val root = page.view ?: return
-        val focusTarget = root.findFocus()
-            ?: root.focusSearch(View.FOCUS_DOWN)
-        focusTarget?.takeIf { it.isShown && it.isFocusable }?.requestFocus()
+        if (saved == null) {
+            return false
+        }
+        val root = page.view ?: return false
+        val focusTarget = root.findFocus() ?: root.focusSearch(View.FOCUS_DOWN) ?: return false
+        return focusTarget.isShown && focusTarget.isFocusable && focusTarget.requestFocus()
     }
 
     private fun revealStartupShell(reason: String) {

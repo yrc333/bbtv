@@ -373,6 +373,8 @@
     <string name="saturday">周六</string>
     <string name="scan_sign_in">扫描二维码登录</string>
     <string name="sign_in_qr_failed_format">获取二维码失败: %1$s</string>
+    <string name="sign_in">登录</string>
+    <string name="menu_home">主页</string>
     <string name="science">科学</string>
     <string name="screen_ratio">画面缩放</string>
     <string name="screen_mirror">画面镜像</string>

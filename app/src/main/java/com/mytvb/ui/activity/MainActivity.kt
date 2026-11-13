@@ -9,9 +9,9 @@ import androidx.annotation.OptIn
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import androidx.fragment.app.commit
+import androidx.fragment.app.commitNow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -22,34 +22,29 @@ import com.mytvb.databinding.ActivityMainBinding
 import com.mytvb.event.AppEventHub
 import com.mytvb.network.NetworkManager
 import com.mytvb.network.session.NetworkSessionGateway
-import com.mytvb.repository.UserRepository
 import com.mytvb.core.ui.base.AppToast
 import com.mytvb.core.ui.base.BaseActivity
 import com.mytvb.core.ui.base.OnBackPressedHandler
-import com.mytvb.model.user.UserDetailInfoModel
-import com.mytvb.feature.category.CategoryFragment
-import com.mytvb.feature.cctv.CctvLiveFragment
-import com.mytvb.feature.dynamic.DynamicFragment
 import com.mytvb.feature.home.HomeFragment
-import com.mytvb.feature.live.LiveFragment
-import com.mytvb.feature.me.MeFragment
-import com.mytvb.ui.fragment.main.MainNavigationViewModel
-import com.mytvb.ui.fragment.main.MainTabFocusTarget
+import com.mytvb.feature.home.HomeLaneFragment
+import com.mytvb.feature.home.HotListFragment
+import com.mytvb.feature.home.RecommendListFragment
+import com.mytvb.feature.me.MeListFragment
 import com.mytvb.feature.search.SearchNewFragment
 import com.mytvb.feature.settings.SettingsFragment
 import com.mytvb.feature.settings.SignInFragment
+import com.mytvb.feature.user.FollowUserListFragment
 import com.mytvb.ui.dialog.UsageTipDialog
 import com.mytvb.ui.dialog.UserInfoDialog
 import com.mytvb.feature.player.PlayerInstancePool
 import com.mytvb.feature.player.VideoPlayerFragment
 import com.mytvb.core.common.log.AppLog
 import com.mytvb.core.common.net.NetworkRecoveryMonitor
-import com.mytvb.core.ui.navigation.TabBarView
-import com.mytvb.core.common.content.ContentFilter
 import com.mytvb.core.startup.AppStartupScheduler
 import com.mytvb.core.ui.image.ImageLoader
+import com.mytvb.ui.fragment.main.MainMenuFragment
+import com.mytvb.ui.fragment.main.MainNavigationViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,7 +52,7 @@ import org.koin.android.ext.android.inject
 import java.lang.ref.WeakReference
 
 @OptIn(UnstableApi::class)
-class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickListener {
+class MainActivity : BaseActivity<ActivityMainBinding>() {
 
     private data class FocusRestoreAnchor(
         val viewRef: WeakReference<View>
@@ -66,8 +61,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
     companion object {
         private const val SETTINGS_OVERLAY_TAG = "settings"
         private const val SETTINGS_OVERLAY_EXIT_ANIM_MS = 275L
-        private const val CCTV_TAB_INDEX = 4
-        private const val SEARCH_TAB_INDEX = 6
+        private const val MENU_TAG = "main_menu"
         private const val STARTUP_TAG = "AppStartup"
         private const val TEEN_REST_DIAG_TAG = "TeenRestDiag"
     }
@@ -84,25 +78,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
         }
     }
 
-    // tab 顺序固定（与 fragmentFactories 一一对应）：
-    // 0 推荐 / 1 分类 / 2 动态 / 3 直播 / 4 CCTV直播 / 5 我的 / 6 搜索。
-    // 用 lazy factory 让 4 个非首屏 tab 真正点中时再构造，省去 1.1s 的 onCreate 大段时间。
-    private val fragmentFactories: List<() -> Fragment> = listOf(
-        { HomeFragment.newInstance() },
-        { CategoryFragment.newInstance() },
-        { DynamicFragment.newInstance() },
-        { LiveFragment.newInstance() },
-        { CctvLiveFragment.newInstance() },
-        { MeFragment.newInstance() },
-        { SearchNewFragment.newInstance() }
-    )
-    private val fragments: MutableList<Fragment?> = MutableList(fragmentFactories.size) { null }
     private val appEventHub: AppEventHub by inject()
     private val mainNavigationViewModel: MainNavigationViewModel by viewModels()
     private val sessionGateway: NetworkSessionGateway by inject()
-    private val userRepository: UserRepository by inject()
     private val personalFeedPrewarmer: com.mytvb.repository.PersonalFeedPrewarmer by inject()
-    private var currentFragmentIndex = -1
     private var exitTime: Long = 0
     private val exitInterval = 2000L
     private val focusRestoreAnchors = ArrayDeque<FocusRestoreAnchor>()
@@ -112,14 +91,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
     private var startupShellRevealed = false
     private var startupInitialContentAttached = false
     private var homeContentReadyLogged = false
-    private var startupAvatarRefreshScheduled = false
-    private var postHomeAvatarRefreshScheduled = false
-    private var avatarRefreshJob: Job? = null
     private val activityCreateStartMs = SystemClock.elapsedRealtime()
     private var lastKnownLoggedIn = false
-    private var pendingInitialTabIndex = -1
     private var restoredFromSavedState = false
-    private var restoredTabIndex = -1
 
     override fun getViewBinding(): ActivityMainBinding {
         val t0 = SystemClock.elapsedRealtime()
@@ -145,7 +119,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
         super.onCreate(savedInstanceState)
         AppLog.i(STARTUP_TAG, "STARTUP super.onCreate elapsed=${SystemClock.elapsedRealtime() - t0}ms")
         lastKnownLoggedIn = sessionGateway.isLoggedIn()
-        restoredTabIndex = mainNavigationViewModel.getSavedTabIndex()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 handleBackPressed()
@@ -157,7 +130,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
                 restoreFocusAfterOverlayPop()
             }
             lastBackStackEntryCount = currentCount
-            updateNavigationVisibility()
         }
         lastBackStackEntryCount = supportFragmentManager.backStackEntryCount
         lifecycleScope.launch {
@@ -173,23 +145,19 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 coroutineScope {
                     launch {
-                        // 订阅会话单一状态源：登录态变化（含停止期间错过的跳变）自动刷新头像，
-                        // 并在登录/登出跳变时补广播给各页面
-                        refreshAvatar(allowNetworkFetch = false)
+                        // 订阅会话单一状态源：登录/登出跳变时补广播给各页面
                         sessionGateway.sessionState.collect { state ->
                             val loggedIn = state.isLoggedIn
                             if (loggedIn != lastKnownLoggedIn) {
                                 lastKnownLoggedIn = loggedIn
                                 appEventHub.dispatch(AppEventHub.Event.UserSessionChanged)
                             }
-                            refreshAvatar(allowNetworkFetch = false)
                         }
                     }
                     launch {
                         appEventHub.events.collect { event ->
                             if (event == AppEventHub.Event.UserSessionChanged) {
                                 lastKnownLoggedIn = sessionGateway.isLoggedIn()
-                                refreshAvatar()
                             }
                             if (event is AppEventHub.Event.VideoBlockedByMinorProtection) {
                                 dispatchVideoBlockedEventToCurrentFragment(event)
@@ -204,37 +172,24 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
 
     override fun initView() {
         val t0 = SystemClock.elapsedRealtime()
-        initFragments()
-        binding.myTabView.setOnTabClickListener(this)
         binding.root.viewTreeObserver.addOnGlobalFocusChangeListener { old, new ->
             AppLog.d(
                 "FocusTrace",
                 "globalFocusChange: old=${old?.javaClass?.simpleName}#${old?.id} " +
-                    "new=${new?.javaClass?.simpleName}#${new?.id} " +
-                    "inTabBar=${new?.let { isInsideTabBar(it) } ?: false}"
+                    "new=${new?.javaClass?.simpleName}#${new?.id}"
             )
         }
         NetworkRecoveryMonitor.start(this) {
             appEventHub.dispatch(AppEventHub.Event.NetworkRecovered)
         }
         applyBackgroundImage()
-        applyCategoryEntryVisibility()
-        applyLiveEntryVisibility()
-        applyCctvLiveEntryVisibility()
         AppLog.i(STARTUP_TAG, "STARTUP MainActivity.initView elapsed=${SystemClock.elapsedRealtime() - t0}ms")
     }
 
     override fun initData() {
         val startMs = SystemClock.elapsedRealtime()
         AppLog.i(STARTUP_TAG, "MainActivity.initData start")
-        if (restoredFromSavedState) {
-            restoreUiStateAfterRecreation()
-        } else {
-            pendingInitialTabIndex = resolveDefaultMainTabIndex()
-            binding.myTabView.restoreTabHighlight(pendingInitialTabIndex)
-            AppLog.i(STARTUP_TAG, "STARTUP deferInitialMainTab index=$pendingInitialTabIndex")
-        }
-        updateNavigationVisibility()
+        ensureMenuFragmentAttached()
         binding.root.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
                 if (binding.root.viewTreeObserver.isAlive) {
@@ -245,11 +200,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
                     "STARTUP T3a firstPreDraw elapsed=${SystemClock.elapsedRealtime() - activityCreateStartMs}ms"
                 )
                 revealStartupShell("first_pre_draw")
-                scheduleFastStartupAvatarRefresh()
                 // 壳首帧已提交，立刻在 IO 线程预热网络并发出推荐首页请求。
-                // 首页 Fragment 要再过两帧才会 loadInitial，loadSharedFirstPage 会直接
-                // await 这条 in-flight 请求，500ms 级的网络 RTT 与 Fragment 创建并行。
-                // （133b814a 壳层先行重构时误删了此调用，导致首屏请求完全串行在 UI 后面。）
+                // 用户从菜单进入「推荐」时 loadSharedFirstPage 直接命中在途请求，
+                // 500ms 级网络 RTT 与菜单首帧并行。
                 (application as? MyBLBLApplication)?.scheduleStartupFirstPagePreload(delayMillis = 0L)
                 Choreographer.getInstance().postFrameCallback {
                     binding.root.post {
@@ -259,22 +212,13 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
                 return true
             }
         })
-        // 壳层先出第一帧；首页 Fragment、网络预加载和提示弹窗下一帧再进入。
-        // 这样启动页只覆盖到主壳可绘制，不再被首页 ViewPager/列表创建拖住。
+        // 壳层先出第一帧；菜单页、网络预加载和提示弹窗下一帧再进入。
         revealStartupShell("shell_initialized")
         binding.root.post {
             AppLog.i(STARTUP_TAG, "MainActivity first root post elapsed=${SystemClock.elapsedRealtime() - activityCreateStartMs}ms")
             revealStartupShell("first_root_post")
         }
         AppLog.i(STARTUP_TAG, "MainActivity.initData end elapsed=${SystemClock.elapsedRealtime() - startMs}ms")
-    }
-
-    private fun resolveDefaultMainTabIndex(): Int {
-        return if (appSettings.getCachedString("default_start_page") == "动态") {
-            2
-        } else {
-            0
-        }
     }
 
     private fun attachInitialContentAfterShellDraw() {
@@ -285,52 +229,13 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
             STARTUP_TAG,
             "STARTUP initialContentPipeline start reason=after_shell_first_frame elapsed=${startMs - activityCreateStartMs}ms"
         )
-        if (!restoredFromSavedState) {
-            attachInitialMainTabAfterShellDraw()
-        }
+        ensureMenuFragmentAttached()
         scheduleDeferredStartupTasks()
         showUsageTipIfNeeded()
         AppLog.i(
             STARTUP_TAG,
             "STARTUP initialContentPipeline end reason=after_shell_first_frame elapsed=${SystemClock.elapsedRealtime() - startMs}ms"
         )
-    }
-
-    private fun attachInitialMainTabAfterShellDraw() {
-        val index = pendingInitialTabIndex
-        if (index !in fragments.indices) return
-        pendingInitialTabIndex = -1
-        val startMs = SystemClock.elapsedRealtime()
-        AppLog.i(STARTUP_TAG, "STARTUP attachInitialMainTab start index=$index elapsed=${startMs - activityCreateStartMs}ms")
-        showFragment(index)
-        postTabSelectedEvent(index)
-        AppLog.i(STARTUP_TAG, "STARTUP attachInitialMainTab end index=$index elapsed=${SystemClock.elapsedRealtime() - startMs}ms")
-    }
-
-    private fun restoreUiStateAfterRecreation() {
-        val resolvedTabIndex = when {
-            restoredTabIndex in fragments.indices -> restoredTabIndex
-            else -> inferCurrentMainTabIndex()
-        }
-        if (resolvedTabIndex in fragments.indices) {
-            currentFragmentIndex = resolvedTabIndex
-            binding.myTabView.restoreTabHighlight(resolvedTabIndex)
-        } else {
-            pendingInitialTabIndex = 0
-            binding.myTabView.restoreTabHighlight(0)
-        }
-    }
-
-    private fun inferCurrentMainTabIndex(): Int {
-        val visibleMainIndex = fragments.indices.firstOrNull { index ->
-            supportFragmentManager.findFragmentByTag("fragment_$index")?.isVisible == true
-        }
-        if (visibleMainIndex != null) {
-            return visibleMainIndex
-        }
-        return fragments.indices.lastOrNull { index ->
-            supportFragmentManager.findFragmentByTag("fragment_$index")?.isAdded == true
-        } ?: -1
     }
 
     private fun applyBackgroundImage() {
@@ -348,152 +253,83 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
         }
     }
 
-    fun applyCategoryEntryVisibility() {
-        val enabled = ContentFilter.isMinorProtectionEnabled(this)
-        binding.myTabView.setCategoryButtonVisible(!enabled)
-        if (enabled && currentFragmentIndex == 1) {
-            binding.myTabView.selectTab(0)
-        }
-    }
-
-    fun applyLiveEntryVisibility() {
-        val liveEntry = appSettings.getCachedString("live_entry", "关") ?: "关"
-        val show = liveEntry == "开"
-        binding.myTabView.setLiveButtonVisible(show)
-        if (!show && currentFragmentIndex == 3) {
-            binding.myTabView.selectTab(0)
-        }
-    }
-
-    fun applyCctvLiveEntryVisibility() {
-        val cctvLiveEntry = appSettings.getCachedString("cctv_live_entry", "关") ?: "关"
-        val show = cctvLiveEntry == "开"
-        binding.myTabView.setCctvLiveButtonVisible(show)
-        if (!show && currentFragmentIndex == CCTV_TAB_INDEX) {
-            binding.myTabView.selectTab(0)
-        }
-    }
-
-    private fun initFragments() {
-        // 不再在这里同步 new 6 个 Fragment，全部走 [getOrCreateFragment] 按需 lazy 构造。
-        // savedInstanceState 恢复路径下，FragmentManager 自带 restoredFragment，下面 showFragment
-        // 里的 findFragmentByTag 会优先命中，不会触发 factory。
-    }
-
-    private fun getOrCreateFragment(index: Int): Fragment {
-        return fragments[index] ?: fragmentFactories[index]().also { fragments[index] = it }
-    }
-
-    private fun showFragment(index: Int) {
-        if (index < 0 || index >= fragments.size) return
-        if (index == 1 && !binding.myTabView.isCategoryButtonVisible()) return
-        if (index == 3 && !binding.myTabView.isLiveButtonVisible()) return
-        if (index == CCTV_TAB_INDEX && !binding.myTabView.isCctvLiveButtonVisible()) return
-        if (currentFragmentIndex == index) return
-
-        val fragmentTag = "fragment_$index"
-        val previousIndex = currentFragmentIndex
-        val currentFragment = supportFragmentManager.findFragmentByTag("fragment_$previousIndex")
-        val targetFragment = supportFragmentManager.findFragmentByTag(fragmentTag)
-            ?: getOrCreateFragment(index)
-
-        supportFragmentManager.commit {
+    /** 菜单页作为唯一常驻页面，全屏功能页都以返回栈叠加在其上。 */
+    private fun ensureMenuFragmentAttached() {
+        if (supportFragmentManager.findFragmentByTag(MENU_TAG) != null) return
+        supportFragmentManager.commitNow {
             setReorderingAllowed(true)
+            add(R.id.container, MainMenuFragment.newInstance(), MENU_TAG)
+        }
+        binding.root.post { focusMenu() }
+    }
 
-            if (currentFragment != null) {
-                hide(currentFragment)
+    fun openMainMenuEntry(entry: MainMenuFragment.Entry) {
+        when (entry) {
+            MainMenuFragment.Entry.RECOMMEND ->
+                openOverlayFragment(RecommendListFragment.newInstance(), "menu_recommend")
+
+            MainMenuFragment.Entry.HOT ->
+                openOverlayFragment(HotListFragment.newInstance(), "menu_hot")
+
+            MainMenuFragment.Entry.ANIMATION ->
+                openOverlayFragment(
+                    HomeLaneFragment.newInstance(HomeLaneFragment.TYPE_ANIMATION),
+                    "menu_animation"
+                )
+
+            MainMenuFragment.Entry.CINEMA ->
+                openOverlayFragment(
+                    HomeLaneFragment.newInstance(HomeLaneFragment.TYPE_CINEMA),
+                    "menu_cinema"
+                )
+
+            MainMenuFragment.Entry.SEARCH ->
+                openOverlayFragment(SearchNewFragment.newInstance(), "menu_search")
+
+            MainMenuFragment.Entry.HOME ->
+                openOverlayFragment(HomeFragment.newInstance(), "menu_home")
+
+            MainMenuFragment.Entry.FOLLOWING -> openFollowingList()
+
+            MainMenuFragment.Entry.HISTORY -> {
+                if (sessionGateway.isLoggedIn()) {
+                    openOverlayFragment(
+                        MeListFragment.newInstance(MeListFragment.TYPE_HISTORY),
+                        "menu_history"
+                    )
+                } else {
+                    openSignIn()
+                }
             }
 
-            if (!targetFragment.isAdded) {
-                add(R.id.container, targetFragment, fragmentTag)
-            } else {
-                show(targetFragment)
-            }
-        }
+            MainMenuFragment.Entry.SIGN_IN -> openSignIn()
 
-        currentFragmentIndex = index
-        mainNavigationViewModel.onTabSelected(index)
-        AppLog.d("FocusTrace", "showFragment done index=$index focusedAfter=${currentFocus?.javaClass?.simpleName}#${currentFocus?.id}")
-    }
-
-    private fun isInsideTabBar(view: View): Boolean {
-        var current: View? = view
-        while (current != null) {
-            if (current === binding.myTabView) return true
-            current = current.parent as? View
-        }
-        return false
-    }
-
-    override fun onTabSelected(index: Int) {
-        AppLog.d("FocusTrace", "onTabSelected index=$index focusedBefore=${currentFocus?.javaClass?.simpleName}#${currentFocus?.id}")
-        // CCTV 直播 tab：直接进 Marmot 播放器，不加载频道列表 Fragment（对标参考 StartActivity→LiveActivity）
-        if (index == CCTV_TAB_INDEX) {
-            MarmotLiveActivity.start(this)
-            // 焦点留在 TV 直播按钮（直播返回后焦点仍在该按钮）
-            binding.myTabView.focusCurrentTab()
-            return
-        }
-        if (supportFragmentManager.backStackEntryCount > 0) {
-            focusRestoreAnchors.clear()
-            supportFragmentManager.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE)
-        }
-        showFragment(index)
-        postTabSelectedEvent(index)
-    }
-
-    override fun onTabReselected(index: Int) {
-        AppLog.d("FocusTrace", "onTabReselected index=$index focusedBefore=${currentFocus?.javaClass?.simpleName}#${currentFocus?.id}")
-        // CCTV 直播 tab 再次点击：重新进入直播（Tab 4 不持有 Fragment，reselect 也要能进直播）
-        if (index == CCTV_TAB_INDEX) {
-            MarmotLiveActivity.start(this)
-            return
-        }
-        // 其他侧边栏按钮再次点击，不触发刷新，避免抢走焦点
-    }
-
-    override fun onTabNavigateRight(index: Int): Boolean {
-        if (index !in fragments.indices) {
-            return false
-        }
-        focusCurrentMainContent(currentFocus, preferSpatialEntry = true)
-        return true
-    }
-
-    override fun onSideButtonNavigateRight(): Boolean {
-        val anchorView = currentFocus
-        focusCurrentMainContent(anchorView, preferSpatialEntry = true)
-        return true
-    }
-
-    override fun onSearchClick() {
-        val anchorView = currentFocus ?: binding.myTabView
-        if (supportFragmentManager.backStackEntryCount > 0) {
-            focusRestoreAnchors.clear()
-            supportFragmentManager.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE)
-        }
-        showFragment(SEARCH_TAB_INDEX)
-        if (currentFragmentIndex == SEARCH_TAB_INDEX) {
-            postTabSelectedEvent(SEARCH_TAB_INDEX)
-            binding.root.post {
-                focusCurrentMainContent(anchorView = anchorView, preferSpatialEntry = false)
+            MainMenuFragment.Entry.SETTINGS -> {
+                if (!isSettingsOverlayVisible()) {
+                    openOverlayFragment(SettingsFragment.newInstance(), SETTINGS_OVERLAY_TAG)
+                }
             }
         }
     }
 
-    override fun onSettingClick() {
-        if (isSettingsOverlayVisible()) {
-            return
+    private fun openFollowingList() {
+        val mid = sessionGateway.getUserInfo()?.mid ?: 0L
+        if (mid > 0L) {
+            openOverlayFragment(
+                FollowUserListFragment.newInstance(mid, FollowUserListFragment.TYPE_FOLLOWING),
+                "menu_following"
+            )
+        } else {
+            openSignIn()
         }
-        openOverlayFragment(SettingsFragment.newInstance(), SETTINGS_OVERLAY_TAG)
     }
 
-    override fun onAvatarClick() {
-        if (!sessionGateway.isLoggedIn()) {
+    private fun openSignIn() {
+        if (sessionGateway.isLoggedIn()) {
+            showUserInfoDialog()
+        } else {
             openOverlayFragment(SignInFragment.newInstance(), "sign_in")
-            return
         }
-        showUserInfoDialog()
     }
 
     private fun revealStartupShell(reason: String) {
@@ -515,84 +351,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
             )
         }
         revealStartupShell("home_content_ready")
-        schedulePostHomeAvatarRefresh()
-    }
-
-    private fun refreshAvatar(
-        allowNetworkFetch: Boolean = true,
-        forceNetworkFetch: Boolean = false
-    ) {
-        if (!sessionGateway.isLoggedIn()) {
-            avatarRefreshJob?.cancel()
-            binding.myTabView.setAvatarUrl(null)
-            binding.myTabView.setAvatarBadge(officialVerifyType = -1)
-            return
-        }
-
-        val cachedInfo = sessionGateway.getUserInfo()
-        if (!cachedInfo?.face.isNullOrBlank()) {
-            binding.myTabView.setAvatarUrl(cachedInfo.face)
-            setTabBarBadge(cachedInfo)
-            if (!forceNetworkFetch) return
-        }
-
-        if (!allowNetworkFetch) return
-
-        if (avatarRefreshJob?.isActive == true) return
-        avatarRefreshJob = lifecycleScope.launch {
-            val startMs = SystemClock.elapsedRealtime()
-            AppLog.i(STARTUP_TAG, "STARTUP avatarRefresh start force=$forceNetworkFetch")
-            val refreshed = userRepository.refreshCurrentUserInfo().getOrNull()
-            if (sessionGateway.isLoggedIn()) {
-                binding.myTabView.setAvatarUrl(refreshed?.face)
-                setTabBarBadge(refreshed)
-            }
-            AppLog.i(
-                STARTUP_TAG,
-                "STARTUP avatarRefresh end elapsed=${SystemClock.elapsedRealtime() - startMs}ms hasFace=${!refreshed?.face.isNullOrBlank()}"
-            )
-        }
-    }
-
-    private fun scheduleFastStartupAvatarRefresh() {
-        if (startupAvatarRefreshScheduled) return
-        startupAvatarRefreshScheduled = true
-        binding.root.postDelayed({
-            lifecycleScope.launch {
-                withContext(Dispatchers.IO) {
-                    (application as? MyBLBLApplication)?.ensureSessionRuntimeReady("startupAvatarCache")
-                }
-                refreshAvatar(allowNetworkFetch = false)
-            }
-        }, 300L)
-    }
-
-    private fun schedulePostHomeAvatarRefresh() {
-        if (postHomeAvatarRefreshScheduled) return
-        postHomeAvatarRefreshScheduled = true
-        binding.root.postDelayed({
-            lifecycleScope.launch {
-                withContext(Dispatchers.IO) {
-                    (application as? MyBLBLApplication)?.ensureDataRuntimeReady("postHomeAvatarNetwork")
-                }
-                refreshAvatar(allowNetworkFetch = true, forceNetworkFetch = true)
-            }
-        }, 250L)
-    }
-
-    private fun setTabBarBadge(info: UserDetailInfoModel?) {
-        if (info == null) {
-            binding.myTabView.setAvatarBadge(officialVerifyType = -1)
-            return
-        }
-        val oType = info.officialVerify?.type ?: info.official?.let { if (it.role > 0) it.type else -1 } ?: -1
-        val vStatus = info.vipStatus.coerceAtLeast(info.vip?.vipStatus ?: 0)
-        val vType = info.vipType.coerceAtLeast(info.vip?.vipType ?: 0)
-        binding.myTabView.setAvatarBadge(
-            officialVerifyType = oType,
-            vipStatus = vStatus,
-            vipType = vType
-        )
     }
 
     private fun scheduleDeferredStartupTasks() {
@@ -601,17 +359,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
         }
         startupTasksScheduled = true
         AppStartupScheduler()
-            .addTask("refreshAvatar", AppStartupScheduler.Phase.DELAYED, delayMs = 4000L) {
-                lifecycleScope.launch {
-                    if (postHomeAvatarRefreshScheduled) {
-                        return@launch
-                    }
-                    withContext(Dispatchers.IO) {
-                        (application as? MyBLBLApplication)?.ensureDataRuntimeReady("refreshAvatar")
-                    }
-                    refreshAvatar(allowNetworkFetch = true)
-                }
-            }
             .addTask("imageCdnPrewarm", AppStartupScheduler.Phase.DELAYED, delayMs = 2500L) {
                 ImageLoader.prewarmCdn()
             }
@@ -652,25 +399,11 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
             .execute()
     }
 
-    fun focusLeftFunctionArea(sourceView: View? = currentFocus): Boolean {
-        if (binding.myTabView.visibility != View.VISIBLE) {
-            return false
-        }
-        return binding.myTabView.focusNearestButtonTo(sourceView)
-    }
-
-    /** BACK 从二级 tab 栏回退的落点：主边栏当前选中的主 tab 按钮（对齐 blbl requestFocusSidebarSelectedNav）。 */
-    fun focusSidebarCurrentTab(): Boolean {
-        if (binding.myTabView.visibility != View.VISIBLE) {
-            return false
-        }
-        return binding.myTabView.focusCurrentTab()
-    }
-
-    fun showTabBar(show: Boolean) {
-        binding.myTabView.visibility = if (show) View.VISIBLE else View.GONE
-        binding.divide.visibility = if (show) View.VISIBLE else View.GONE
-    }
+    /**
+     * 菜单模式下没有左侧功能栏，列表左边缘不再有可聚焦的落点。
+     * 保留该入口供各列表的 LEFT 边缘逻辑调用，行为为「不处理」，交由框架默认焦点搜索。
+     */
+    fun focusLeftFunctionArea(sourceView: View? = currentFocus): Boolean = false
 
     private fun handleBackPressed() {
         if (dispatchBackPressedToVisibleFragment()) {
@@ -704,10 +437,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
             if (currentFocus != null && currentFocus.isAttachedToWindow && currentFocus.isShown && currentFocus.isFocusable) {
                 return@postDelayed
             }
-            val handledByContent = focusCurrentMainContent(anchorView = null, preferSpatialEntry = false)
-            if (!handledByContent) {
-                binding.myTabView.focusCurrentTab()
-            }
+            focusMenu()
         }, 100L)
     }
 
@@ -765,16 +495,12 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
             }
         }
         val isSettingsOverlay = isSettingsOverlay(fragment = fragment, tag = tag)
-        val isVideoPlayerOverlay = isVideoPlayerOverlay(fragment = fragment, tag = tag)
 
-        if (!isVideoPlayerOverlay) {
-            showTabBar(false)
-            supportFragmentManager.fragments
-                .asReversed()
-                .firstOrNull { it.isVisible }
-                ?.view
-                ?.clearFocus()
-        }
+        supportFragmentManager.fragments
+            .asReversed()
+            .firstOrNull { it.isVisible }
+            ?.view
+            ?.clearFocus()
 
         supportFragmentManager.commit {
             if (isSettingsOverlay) {
@@ -798,9 +524,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
             if (addToBackStack) {
                 addToBackStack(tag)
             }
-        }
-        if (isVideoPlayerOverlay) {
-            showTabBar(false)
         }
     }
 
@@ -836,14 +559,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
         fun onVideoBlocked(aid: Long, bvid: String)
     }
 
-    private fun updateNavigationVisibility() {
-        val shouldShowTabBar = supportFragmentManager.backStackEntryCount == 0
-        if (shouldShowTabBar) {
-            focusRestoreAnchors.clear()
-        }
-        showTabBar(shouldShowTabBar)
-    }
-
     private fun restoreFocusAfterOverlayPop() {
         val anchor = focusRestoreAnchors.removeLastOrNull()
         val delayMs = pendingFocusRestoreDelayMs
@@ -856,15 +571,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
                     return@postDelayed
                 }
             }
-            val handledByContent = focusCurrentMainContent(
-                anchorView = target,
-                preferSpatialEntry = target != null
-            )
-            if (handledByContent) {
-                return@postDelayed
-            }
-            val handledByTabBar = binding.myTabView.focusCurrentTab()
-            if (handledByTabBar) {
+            if (focusMenu()) {
                 return@postDelayed
             }
             supportFragmentManager.fragments
@@ -899,13 +606,13 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
             ?.tag == SETTINGS_OVERLAY_TAG
     }
 
-    private fun focusCurrentMainContent(
-        anchorView: View? = currentFocus,
-        preferSpatialEntry: Boolean = false
-    ): Boolean {
-        val currentFragment = supportFragmentManager.findFragmentByTag("fragment_$currentFragmentIndex")
-        return (currentFragment as? MainTabFocusTarget)
-            ?.focusEntryFromMainTab(anchorView, preferSpatialEntry) == true
+    /** 焦点兜底落到菜单首个入口（返回后锚点失效、或菜单首次展示时）。 */
+    private fun focusMenu(): Boolean {
+        if (supportFragmentManager.backStackEntryCount > 0) {
+            return false
+        }
+        val menu = supportFragmentManager.findFragmentByTag(MENU_TAG) as? MainMenuFragment
+        return menu?.focusFirstItem() == true
     }
 
     private fun shouldFinishDuplicateLauncherLaunch(): Boolean {
@@ -913,10 +620,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
         return !isTaskRoot &&
             launchIntent?.action == android.content.Intent.ACTION_MAIN &&
             launchIntent.hasCategory(android.content.Intent.CATEGORY_LAUNCHER)
-    }
-
-    private fun postTabSelectedEvent(index: Int) {
-        mainNavigationViewModel.dispatch(MainNavigationViewModel.Event.MainTabSelected(index))
     }
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
@@ -932,7 +635,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), TabBarView.OnTabClickL
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        mainNavigationViewModel.onTabSelected(currentFragmentIndex)
         super.onSaveInstanceState(outState)
     }
 

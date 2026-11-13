@@ -178,12 +178,12 @@ class CategoryFragment : BaseFragment<FragmentCategoryBinding>(), MainTabFocusTa
     }
 
     /**
-     * BACK 三层分发（与 HomeFragment/MeFragment 一致）：
-     * 内容区 → 当前选中的分区 tab；tab 栏 → 主边栏当前主 tab 按钮；都不是 → 放行给退出流程。
+     * BACK 两层分发：
+     * 内容区 → 当前选中的分区 tab；tab 栏 → 放行，由宿主出栈返回菜单页。
      */
     override fun onBackPressed(): Boolean {
         if (tabLayout.hasFocus()) {
-            return (activity as? com.mytvb.ui.activity.MainActivity)?.focusSidebarCurrentTab() == true
+            return false
         }
         if (viewPager.hasFocus()) {
             return tabLayout.focusSelectedTab()

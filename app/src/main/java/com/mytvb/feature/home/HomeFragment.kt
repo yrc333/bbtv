@@ -143,25 +143,11 @@ class HomeFragment : Fragment(), MainTabFocusTarget, OnBackPressedHandler {
 
 
     /**
-     * BACK 三层分发（对齐 blbl）：
-     * 内容区 → 聚焦当前选中的二级 tab；tab 栏 → 回左侧主边栏当前主 tab 按钮；
-     * 都不是（如焦点已在主边栏）→ 返回 false 交给 MainActivity 走双击退出。
+     * BACK 直接放行：由 MainActivity 出栈，回到启动菜单页。
+     * （旧版是先回二级 tab 再回左侧主边栏，菜单模式下左侧栏已不存在。）
      */
     override fun onBackPressed(): Boolean {
-        val currentBinding = _binding ?: return false
-        val tabFocus = currentBinding.tabLayout.hasFocus()
-        val contentFocus = currentBinding.viewPager.hasFocus()
-        AppLog.d("HomeBack", "onBackPressed tabFocus=$tabFocus contentFocus=$contentFocus isHidden=$isHidden")
-        if (tabFocus) {
-            val handled = (activity as? MainActivity)?.focusSidebarCurrentTab() == true
-            AppLog.d("HomeBack", "tab->sidebar handled=$handled")
-            return handled
-        }
-        if (contentFocus) {
-            val handled = currentBinding.tabLayout.focusSelectedTab()
-            AppLog.d("HomeBack", "content->tab handled=$handled")
-            return handled
-        }
+        AppLog.d("HomeBack", "onBackPressed isHidden=$isHidden")
         return false
     }
 

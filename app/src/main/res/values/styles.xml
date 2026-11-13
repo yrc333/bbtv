@@ -44,6 +44,18 @@
         <item name="android:backgroundDimEnabled">false</item>
         <item name="windowActionModeOverlay">true</item>
     </style>
+    <style name="MainMenuItem">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">@dimen/px180</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_margin">@dimen/px15</item>
+        <item name="android:background">@drawable/main_menu_item_background</item>
+        <item name="android:clickable">true</item>
+        <item name="android:descendantFocusability">blocksDescendants</item>
+        <item name="android:focusable">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:orientation">vertical</item>
+    </style>
     <style name="ExoMediaButton" parent="">
         <item name="android:background">?android:attr/selectableItemBackground</item>
         <item name="android:layout_width">@dimen/exo_media_button_width</item>

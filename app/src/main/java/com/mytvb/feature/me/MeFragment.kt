@@ -230,13 +230,13 @@ class MeFragment : BaseFragment<FragmentMeBinding>(), MainTabFocusTarget, OnBack
     }
 
     /**
-     * BACK 三层分发（与 HomeFragment 一致）：
-     * 内容区 → 当前选中的二级 tab；tab 栏 → 主边栏当前主 tab 按钮；
-     * 未登录时 tab/viewPager 均 GONE（hasFocus 恒 false），自然放行给退出流程。
+     * BACK 两层分发：
+     * 内容区 → 当前选中的二级 tab；tab 栏 → 放行，由宿主出栈返回菜单页。
+     * 未登录时 tab/viewPager 均 GONE（hasFocus 恒 false），自然放行。
      */
     override fun onBackPressed(): Boolean {
         if (tabLayout.hasFocus()) {
-            return (activity as? com.mytvb.ui.activity.MainActivity)?.focusSidebarCurrentTab() == true
+            return false
         }
         if (viewPager.hasFocus()) {
             return tabLayout.focusSelectedTab()

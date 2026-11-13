@@ -89,8 +89,6 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>() {
         private const val KEY_DEFAULT_START_PAGE = "default_start_page"
         private const val KEY_IMAGE_QUALITY = "image_quality"
         private const val KEY_THEME = "theme"
-        private const val KEY_LIVE_ENTRY = "live_entry"
-        private const val KEY_CCTV_LIVE_ENTRY = "cctv_live_entry"
         private const val KEY_MINOR_PROTECTION = "minor_protection"
         private const val KEY_WATCH_TIME_LIMIT = "teen_watch_limit_min"
         private const val KEY_REST_TIME_LIMIT = "teen_rest_limit_min"
@@ -172,7 +170,7 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>() {
          */
         private val TEEN_TIME_OPTIONS = arrayOf("0", "1") + (10..120 step 10).map { it.toString() }
 
-        private val HOME_START_PAGE_OPTIONS = arrayOf("推荐", "热门", "番剧", "影视", "动态")
+        private val HOME_START_PAGE_OPTIONS = arrayOf("推荐", "热门", "番剧", "影视")
 
         /** 界面语言选项：tag 空串=跟随系统；语言名固定显示各自语言原文（业界惯例，不随 UI 语言翻译）。 */
         private val UI_LANGUAGE_TAGS = arrayOf("", "zh-CN", "zh-TW", "en")
@@ -260,8 +258,6 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>() {
         commonGroups = listOf(
             SettingGroup(R.string.setting_group_browse, listOf(
                 stored(KEY_DEFAULT_START_PAGE, R.string.default_start_page, "热门"),
-                stored(KEY_LIVE_ENTRY, R.string.live_entry, "关"),
-                stored(KEY_CCTV_LIVE_ENTRY, R.string.cctv_live, "关"),
                 stored(KEY_SHOW_VIDEO_DETAIL, R.string.show_video_detail_page, "关"),
                 stored(KEY_DOUYIN_MODE, R.string.douyin_mode, "关"),
                 stored(KEY_GIVE_COIN_NUMBER, R.string.give_coin_number, "2")
@@ -586,14 +582,6 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>() {
         when (key) {
             // —— 通用·浏览与互动 ——
             KEY_DEFAULT_START_PAGE -> showCommonChoiceDialog(key, HOME_START_PAGE_OPTIONS)
-            KEY_LIVE_ENTRY -> toggle(key) {
-                appSettings.putStringAsync(key, it)
-                (activity as? MainActivity)?.applyLiveEntryVisibility()
-            }
-            KEY_CCTV_LIVE_ENTRY -> toggle(key) {
-                appSettings.putStringAsync(key, it)
-                (activity as? MainActivity)?.applyCctvLiveEntryVisibility()
-            }
             KEY_SHOW_VIDEO_DETAIL -> toggle(key)
             KEY_DOUYIN_MODE -> toggle(key)
             KEY_GIVE_COIN_NUMBER -> showCommonChoiceDialog(key, arrayOf("1", "2"))
@@ -656,10 +644,7 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>() {
             KEY_DM_FILTER_WEIGHT -> showDmChoiceDialog(key, DM_SMART_FILTER_OPTIONS)
             KEY_DM_MERGE_DUPLICATE -> toggle(key)
             // —— 青少年·时间限制 ——
-            KEY_MINOR_PROTECTION -> toggle(key) {
-                appSettings.putStringAsync(key, it)
-                (activity as? MainActivity)?.applyCategoryEntryVisibility()
-            }
+            KEY_MINOR_PROTECTION -> toggle(key)
             KEY_WATCH_TIME_LIMIT -> showTeenTimeChoiceDialog(key)
             KEY_REST_TIME_LIMIT -> showTeenTimeChoiceDialog(key)
             // —— 青少年·公益广告 ——
@@ -1320,8 +1305,6 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>() {
                 setStored(KEY_DEFAULT_START_PAGE, HOME_START_PAGE_OPTIONS.first())
             }
         }
-        applyStored(KEY_LIVE_ENTRY)
-        applyStored(KEY_CCTV_LIVE_ENTRY)
         updateRiskControlStatus()
         applyStored(KEY_SHOW_VIDEO_DETAIL)
         applyStored(KEY_DOUYIN_MODE)

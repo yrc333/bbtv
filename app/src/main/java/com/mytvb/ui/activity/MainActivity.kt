@@ -25,9 +25,6 @@ import com.mytvb.network.session.NetworkSessionGateway
 import com.mytvb.core.ui.base.AppToast
 import com.mytvb.core.ui.base.BaseActivity
 import com.mytvb.core.ui.base.OnBackPressedHandler
-import com.mytvb.feature.home.HomeFragment
-import com.mytvb.feature.home.HomeLaneFragment
-import com.mytvb.feature.home.HotListFragment
 import com.mytvb.feature.home.RecommendListFragment
 import com.mytvb.feature.me.MeListFragment
 import com.mytvb.feature.search.SearchNewFragment
@@ -268,26 +265,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             MainMenuFragment.Entry.RECOMMEND ->
                 openOverlayFragment(RecommendListFragment.newInstance(), "menu_recommend")
 
-            MainMenuFragment.Entry.HOT ->
-                openOverlayFragment(HotListFragment.newInstance(), "menu_hot")
-
-            MainMenuFragment.Entry.ANIMATION ->
-                openOverlayFragment(
-                    HomeLaneFragment.newInstance(HomeLaneFragment.TYPE_ANIMATION),
-                    "menu_animation"
-                )
-
-            MainMenuFragment.Entry.CINEMA ->
-                openOverlayFragment(
-                    HomeLaneFragment.newInstance(HomeLaneFragment.TYPE_CINEMA),
-                    "menu_cinema"
-                )
-
             MainMenuFragment.Entry.SEARCH ->
                 openOverlayFragment(SearchNewFragment.newInstance(), "menu_search")
-
-            MainMenuFragment.Entry.HOME ->
-                openOverlayFragment(HomeFragment.newInstance(), "menu_home")
 
             MainMenuFragment.Entry.FOLLOWING -> openFollowingList()
 

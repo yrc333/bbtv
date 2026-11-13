@@ -226,8 +226,12 @@ class MeListFragment : BaseFragment<FragmentMeTabListBinding>(), MeTabPage, com.
     override fun initData() {
         lastKnownLoggedIn = viewModel.isLoggedIn()
         AppLog.d("MePerf", "MeListFragment.initData: type=$type, network_only")
-        // 不在 initData 里直接 loadData()，等 onTabSelected() 触发首次加载，
-        // 避免相邻 tab 被预加载时也发起网络请求。
+        // 在「我的」页内时由 MeFragment 切页回调 onTabSelected 触发首次加载，
+        // 避免相邻 tab 被预加载时也发起网络请求；
+        // 作为菜单独立页面打开时没有宿主回调，需要自行补一次首载，否则一直空白。
+        if (parentFragment !is MeFragment) {
+            onTabSelected()
+        }
     }
 
     override fun onResume() {

@@ -224,7 +224,10 @@ class FollowUserListFragment : BaseFragment<FragmentFollowUserListBinding>() {
             if (!hasRequestedInitialFocus && currentPage == 1) {
                 hasRequestedInitialFocus = true
                 if (adapter.itemCount > 0) {
-                    tvFocusController?.requestFocusPosition(0)
+                    // 首载落地时焦点可能还停在返回键上（onResume 的兜底落点），
+                    // 默认会被 controller 的「焦点在列表外」保护拦下，导致卡片看似选中
+                    // 实际无焦点、按 OK 无响应。这里显式允许从外部抢焦。
+                    tvFocusController?.requestFocusPosition(0, allowOutsideFocus = true)
                 } else {
                     requestBackFocus()
                 }
@@ -298,7 +301,7 @@ class FollowUserListFragment : BaseFragment<FragmentFollowUserListBinding>() {
             .takeIf { it != RecyclerView.NO_POSITION }
             ?.coerceIn(0, adapter.itemCount - 1)
         if (targetPosition == null ||
-            tvFocusController?.requestFocusPosition(targetPosition) != true ||
+            tvFocusController?.requestFocusPosition(targetPosition, allowOutsideFocus = true) != true ||
             !binding.recyclerView.hasFocusInChildren()
         ) {
             requestBackFocus()

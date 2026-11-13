@@ -20,18 +20,14 @@ import com.mytvb.ui.activity.MainActivity
 class MainMenuFragment : BaseFragment<FragmentMainMenuBinding>() {
 
     companion object {
-        private const val COLUMNS = 5
+        private const val COLUMNS = 3
 
         fun newInstance(): MainMenuFragment = MainMenuFragment()
     }
 
     enum class Entry(@StringRes val titleRes: Int, @DrawableRes val iconRes: Int) {
         RECOMMEND(R.string.recommend, R.drawable.tab_recommend),
-        HOT(R.string.hot, R.drawable.ic_hot),
-        ANIMATION(R.string.animation, R.drawable.ic_tv),
-        CINEMA(R.string.film_and_television, R.drawable.ic_display),
         SEARCH(R.string.search, R.drawable.ic_search),
-        HOME(R.string.menu_home, R.drawable.ic_home),
         FOLLOWING(R.string.user_following, R.drawable.ic_user),
         HISTORY(R.string.history, R.drawable.ic_history),
         SIGN_IN(R.string.sign_in, R.drawable.tab_me),

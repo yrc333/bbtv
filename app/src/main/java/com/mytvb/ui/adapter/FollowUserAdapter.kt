@@ -1,5 +1,6 @@
 package com.mytvb.ui.adapter
 
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.view.isVisible
@@ -67,6 +68,17 @@ class FollowUserAdapter(
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
                     onItemClick(currentList[position])
+                }
+            }
+            // 遥控器 OK 显式走点击，避免个别机型上 OK 未落到 View 默认的 performClick
+            binding.root.setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN &&
+                    (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
+                ) {
+                    binding.root.performClick()
+                    true
+                } else {
+                    false
                 }
             }
 

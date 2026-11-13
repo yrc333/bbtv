@@ -94,4 +94,11 @@ class MainMenuFragment : BaseFragment<FragmentMainMenuBinding>() {
         val target = menuItems.firstOrNull { it.isShown && it.isFocusable } ?: return false
         return target.requestFocus()
     }
+
+    /** 返回菜单时把焦点放回刚刚退出的入口。 */
+    fun focusItem(entry: Entry): Boolean {
+        val target = menuItems.getOrNull(Entry.values().indexOf(entry)) ?: return false
+        if (!target.isShown) return false
+        return target.requestFocus()
+    }
 }

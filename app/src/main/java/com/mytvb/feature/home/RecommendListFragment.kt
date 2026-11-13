@@ -84,7 +84,8 @@ class RecommendListFragment : VideoFeedFragment() {
             return
         }
         lastSessionMid = currentMid
-        if (isResumed && !isLoading) {
+        // 隐藏（用户已退出推荐页）时不再自动刷新，避免"回头一看内容全变了"
+        if (isResumed && !isHidden && !isLoading) {
             refresh()
         }
     }

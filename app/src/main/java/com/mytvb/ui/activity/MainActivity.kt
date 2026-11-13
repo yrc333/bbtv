@@ -59,6 +59,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         private const val SETTINGS_OVERLAY_TAG = "settings"
         private const val SETTINGS_OVERLAY_EXIT_ANIM_MS = 275L
         private const val MENU_TAG = "main_menu"
+        private const val MENU_PAGE_TAG_PREFIX = "menu_page_"
         private const val STARTUP_TAG = "AppStartup"
         private const val TEEN_REST_DIAG_TAG = "TeenRestDiag"
     }
@@ -82,6 +83,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     private var exitTime: Long = 0
     private val exitInterval = 2000L
     private val focusRestoreAnchors = ArrayDeque<FocusRestoreAnchor>()
+    private val pageFocusAnchors = mutableMapOf<String, WeakReference<View>>()
     private var lastBackStackEntryCount = 0
     private var pendingFocusRestoreDelayMs = 0L
     private var startupTasksScheduled = false
@@ -262,53 +264,123 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
 
     fun openMainMenuEntry(entry: MainMenuFragment.Entry) {
         when (entry) {
-            MainMenuFragment.Entry.RECOMMEND ->
-                openOverlayFragment(RecommendListFragment.newInstance(), "menu_recommend")
-
-            MainMenuFragment.Entry.SEARCH ->
-                openOverlayFragment(SearchNewFragment.newInstance(), "menu_search")
-
-            MainMenuFragment.Entry.FOLLOWING -> openFollowingList()
+            MainMenuFragment.Entry.FOLLOWING -> {
+                val mid = sessionGateway.getUserInfo()?.mid ?: 0L
+                if (sessionGateway.isLoggedIn() && mid > 0L) {
+                    showMenuPage(entry)
+                } else {
+                    showMenuPage(MainMenuFragment.Entry.SIGN_IN)
+                }
+            }
 
             MainMenuFragment.Entry.HISTORY -> {
                 if (sessionGateway.isLoggedIn()) {
-                    openOverlayFragment(
-                        MeListFragment.newInstance(MeListFragment.TYPE_HISTORY),
-                        "menu_history"
-                    )
+                    showMenuPage(entry)
                 } else {
-                    openSignIn()
+                    showMenuPage(MainMenuFragment.Entry.SIGN_IN)
                 }
             }
 
-            MainMenuFragment.Entry.SIGN_IN -> openSignIn()
-
-            MainMenuFragment.Entry.SETTINGS -> {
-                if (!isSettingsOverlayVisible()) {
-                    openOverlayFragment(SettingsFragment.newInstance(), SETTINGS_OVERLAY_TAG)
+            MainMenuFragment.Entry.SIGN_IN -> {
+                if (sessionGateway.isLoggedIn()) {
+                    showUserInfoDialog()
+                } else {
+                    showMenuPage(entry)
                 }
+            }
+
+            else -> showMenuPage(entry)
+        }
+    }
+
+    /**
+     * 功能页常驻：首次选中时创建并加载；之后再次选中只做 show/hide，
+     * 不重建 Fragment、不重新请求首屏（内容保持上次离开时的状态），
+     * 列表触底翻页仍由各页面自己的分页逻辑负责。
+     */
+    private fun showMenuPage(entry: MainMenuFragment.Entry) {
+        val tag = menuPageTag(entry)
+        val target = supportFragmentManager.findFragmentByTag(tag) ?: createMenuPage(entry)
+        if (target.isVisible) return
+
+        // 记录当前页退出前的焦点，下次进入恢复到同一控件
+        visibleMenuPage()?.let { (currentEntry, page) ->
+            page.view?.findFocus()?.let { focused ->
+                pageFocusAnchors[menuPageTag(currentEntry)] = WeakReference(focused)
+            }
+        }
+
+        supportFragmentManager.commitNow {
+            setReorderingAllowed(true)
+            supportFragmentManager.fragments
+                .filter { it.isAdded && it.isVisible }
+                .forEach { hide(it) }
+            if (target.isAdded) {
+                show(target)
+            } else {
+                add(R.id.container, target, tag)
+            }
+        }
+        binding.root.post { requestPageFocus(entry, target) }
+    }
+
+    private fun createMenuPage(entry: MainMenuFragment.Entry): Fragment = when (entry) {
+        MainMenuFragment.Entry.RECOMMEND -> RecommendListFragment.newInstance()
+        MainMenuFragment.Entry.SEARCH -> SearchNewFragment.newInstance()
+        MainMenuFragment.Entry.FOLLOWING -> FollowUserListFragment.newInstance(
+            sessionGateway.getUserInfo()?.mid ?: 0L,
+            FollowUserListFragment.TYPE_FOLLOWING
+        )
+        MainMenuFragment.Entry.HISTORY -> MeListFragment.newInstance(MeListFragment.TYPE_HISTORY)
+        MainMenuFragment.Entry.SIGN_IN -> SignInFragment.newInstance()
+        MainMenuFragment.Entry.SETTINGS -> SettingsFragment.newInstance()
+    }
+
+    private fun menuPageTag(entry: MainMenuFragment.Entry): String =
+        MENU_PAGE_TAG_PREFIX + entry.name
+
+    private fun visibleMenuPage(): Pair<MainMenuFragment.Entry, Fragment>? {
+        val page = supportFragmentManager.fragments.firstOrNull {
+            it.isVisible && it.tag?.startsWith(MENU_PAGE_TAG_PREFIX) == true
+        } ?: return null
+        val entryName = page.tag?.removePrefix(MENU_PAGE_TAG_PREFIX) ?: return null
+        val entry = MainMenuFragment.Entry.values().firstOrNull { it.name == entryName } ?: return null
+        return entry to page
+    }
+
+    /** BACK / 页面返回键：隐藏当前功能页（保留实例与内容），回到菜单并聚焦对应入口。 */
+    private fun closeMenuPage(entry: MainMenuFragment.Entry, page: Fragment) {
+        page.view?.findFocus()?.let { focused ->
+            pageFocusAnchors[menuPageTag(entry)] = WeakReference(focused)
+        }
+        val menu = supportFragmentManager.findFragmentByTag(MENU_TAG)
+        supportFragmentManager.commitNow {
+            setReorderingAllowed(true)
+            hide(page)
+            if (menu != null) {
+                show(menu)
+            } else {
+                add(R.id.container, MainMenuFragment.newInstance(), MENU_TAG)
+            }
+        }
+        binding.root.post {
+            val menuFragment = supportFragmentManager.findFragmentByTag(MENU_TAG) as? MainMenuFragment
+            if (menuFragment?.focusItem(entry) != true) {
+                focusMenu()
             }
         }
     }
 
-    private fun openFollowingList() {
-        val mid = sessionGateway.getUserInfo()?.mid ?: 0L
-        if (mid > 0L) {
-            openOverlayFragment(
-                FollowUserListFragment.newInstance(mid, FollowUserListFragment.TYPE_FOLLOWING),
-                "menu_following"
-            )
-        } else {
-            openSignIn()
+    private fun requestPageFocus(entry: MainMenuFragment.Entry, page: Fragment) {
+        val tag = menuPageTag(entry)
+        val saved = pageFocusAnchors[tag]?.get()
+        if (saved != null && saved.isAttachedToWindow && saved.isShown && saved.requestFocus()) {
+            return
         }
-    }
-
-    private fun openSignIn() {
-        if (sessionGateway.isLoggedIn()) {
-            showUserInfoDialog()
-        } else {
-            openOverlayFragment(SignInFragment.newInstance(), "sign_in")
-        }
+        val root = page.view ?: return
+        val focusTarget = root.findFocus()
+            ?: root.focusSearch(View.FOCUS_DOWN)
+        focusTarget?.takeIf { it.isShown && it.isFocusable }?.requestFocus()
     }
 
     private fun revealStartupShell(reason: String) {
@@ -397,6 +469,12 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             return
         }
 
+        val menuPage = visibleMenuPage()
+        if (menuPage != null) {
+            closeMenuPage(menuPage.first, menuPage.second)
+            return
+        }
+
         mainNavigationViewModel.dispatch(MainNavigationViewModel.Event.BackPressed)
 
         if (System.currentTimeMillis() - exitTime <= exitInterval) {
@@ -416,7 +494,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             if (currentFocus != null && currentFocus.isAttachedToWindow && currentFocus.isShown && currentFocus.isFocusable) {
                 return@postDelayed
             }
-            focusMenu()
+            restoreFocusForCurrentScreen()
         }, 100L)
     }
 
@@ -425,6 +503,11 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
             pendingFocusRestoreDelayMs =
                 if (isSettingsOverlayVisible()) SETTINGS_OVERLAY_EXIT_ANIM_MS else 0L
             supportFragmentManager.popBackStack()
+            return
+        }
+        val menuPage = visibleMenuPage()
+        if (menuPage != null) {
+            closeMenuPage(menuPage.first, menuPage.second)
             return
         }
         handleBackPressed()
@@ -550,17 +633,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
                     return@postDelayed
                 }
             }
-            if (focusMenu()) {
-                return@postDelayed
-            }
-            supportFragmentManager.fragments
-                .asReversed()
-                .firstOrNull { it.isVisible }
-                ?.view
-                ?.let { visibleRoot ->
-                    val currentFocus = visibleRoot.findFocus()
-                    currentFocus?.requestFocus()
-                }
+            restoreFocusForCurrentScreen()
         }, delayMs)
     }
 
@@ -579,10 +652,12 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
     }
 
     private fun isSettingsOverlayVisible(): Boolean {
-        return supportFragmentManager.fragments
+        val topTag = supportFragmentManager.fragments
             .asReversed()
             .firstOrNull { it.isVisible }
-            ?.tag == SETTINGS_OVERLAY_TAG
+            ?.tag
+        return topTag == SETTINGS_OVERLAY_TAG ||
+            topTag == menuPageTag(MainMenuFragment.Entry.SETTINGS)
     }
 
     /** 焦点兜底落到菜单首个入口（返回后锚点失效、或菜单首次展示时）。 */
@@ -590,8 +665,21 @@ class MainActivity : BaseActivity<ActivityMainBinding>() {
         if (supportFragmentManager.backStackEntryCount > 0) {
             return false
         }
+        if (visibleMenuPage() != null) {
+            return false
+        }
         val menu = supportFragmentManager.findFragmentByTag(MENU_TAG) as? MainMenuFragment
         return menu?.focusFirstItem() == true
+    }
+
+    /** 按当前可见界面恢复焦点：功能页优先，其次菜单。 */
+    private fun restoreFocusForCurrentScreen() {
+        val menuPage = visibleMenuPage()
+        if (menuPage != null) {
+            requestPageFocus(menuPage.first, menuPage.second)
+            return
+        }
+        focusMenu()
     }
 
     private fun shouldFinishDuplicateLauncherLaunch(): Boolean {

@@ -18,6 +18,7 @@ import okhttp3.Cookie
 import com.mytvb.repository.UserRepository
 import com.mytvb.repository.remote.TvAuthRepository
 import com.mytvb.core.ui.base.BaseFragment
+import com.mytvb.core.ui.navigation.navigateBackFromUi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -181,7 +182,7 @@ class SignInFragment : BaseFragment<FragmentSignInBinding>() {
             // refreshCurrentUserInfo → syncUserSession 检测到"无会话→有会话"跳变时会在
             // NetworkManager 内部统一广播 UserSessionChanged，此处不再手动 dispatch
             userRepository.refreshCurrentUserInfo()
-            parentFragmentManager.popBackStackImmediate()
+            navigateBackFromUi()
         }
     }
 

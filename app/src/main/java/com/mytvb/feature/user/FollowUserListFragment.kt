@@ -26,6 +26,7 @@ import com.mytvb.core.ui.focus.tv.TvListFocusController
 import com.mytvb.feature.detail.UserSpaceFragment
 import com.mytvb.core.ui.layout.WrapContentGridLayoutManager
 import com.mytvb.core.ui.decoration.GridSpacingItemDecoration
+import com.mytvb.core.ui.navigation.navigateBackFromUi
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -86,7 +87,7 @@ class FollowUserListFragment : BaseFragment<FragmentFollowUserListBinding>() {
             if (type == TYPE_FOLLOWER) R.string.user_follower else R.string.user_following
         )
         binding.buttonBack.setOnClickListener {
-            parentFragmentManager.popBackStack()
+            navigateBackFromUi()
         }
         binding.buttonBack.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {

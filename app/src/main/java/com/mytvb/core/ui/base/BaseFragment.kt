@@ -231,7 +231,7 @@ abstract class BaseFragment<VB : ViewBinding> : Fragment() {
     }
 
     protected open fun openInHostContainer(fragment: Fragment, addToBackStack: Boolean = true) {
-        mainActivity?.openInHostContainer(fragment, addToBackStack)
+        (mainActivity ?: activity as? MainActivity)?.openInHostContainer(fragment, addToBackStack)
     }
 
     override fun onDestroyView() {

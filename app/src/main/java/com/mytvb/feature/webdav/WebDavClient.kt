@@ -150,7 +150,8 @@ class WebDavClient(private val config: WebDavConfig) {
     }
 
     private fun tagName(parser: XmlPullParser): String {
-        return (parser.localName ?: parser.name.substringAfter(':')).lowercase(Locale.ROOT)
+        // Android 的 XmlPullParser stub 未暴露 getLocalName，直接用带前缀的名字去掉前缀。
+        return parser.name.substringAfter(':').lowercase(Locale.ROOT)
     }
 
     private fun readText(parser: XmlPullParser): String {

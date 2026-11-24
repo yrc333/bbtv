@@ -4,12 +4,14 @@ import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.mytvb.R
 import com.mytvb.core.common.settings.AppSettingsDataStore
 import com.mytvb.core.ui.base.AppToast
 import com.mytvb.core.ui.base.BaseFragment
 import com.mytvb.core.ui.base.OnBackPressedHandler
+import com.mytvb.core.ui.base.adaptiveSpanCount
+import com.mytvb.core.ui.decoration.GridSpacingItemDecoration
+import com.mytvb.core.ui.layout.WrapContentGridLayoutManager
 import com.mytvb.core.ui.navigation.navigateBackFromUi
 import com.mytvb.databinding.FragmentWebDavBrowserBinding
 import com.mytvb.ui.activity.WebDavPlayerActivity
@@ -22,8 +24,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import okhttp3.Credentials
 import okhttp3.HttpUrl
 import org.koin.android.ext.android.inject
 
@@ -44,6 +48,7 @@ class WebDavBrowserFragment : BaseFragment<FragmentWebDavBrowserBinding>(), OnBa
     private var client: WebDavClient? = null
     private val folderStack = mutableListOf<HttpUrl>()
     private var loadJob: Job? = null
+    private var coverJob: Job? = null
 
     override fun useLightBaseContainer(): Boolean = true
 
@@ -62,9 +67,18 @@ class WebDavBrowserFragment : BaseFragment<FragmentWebDavBrowserBinding>(), OnBa
                 WebDavPlayerActivity.start(requireContext(), entry.url.toString(), entry.name)
             }
         }
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        val spanCount = resources.adaptiveSpanCount(base = 3, wide = 5)
+        val layoutManager = WrapContentGridLayoutManager(requireContext(), spanCount)
+        binding.recyclerView.layoutManager = layoutManager
         binding.recyclerView.adapter = adapter
         binding.recyclerView.itemAnimator = null
+        binding.recyclerView.addItemDecoration(
+            GridSpacingItemDecoration(
+                layoutManager.spanCount,
+                resources.getDimensionPixelOffset(R.dimen.px14),
+                true
+            )
+        )
 
         binding.buttonBack.setOnClickListener {
             if (!navigateUp()) navigateBackFromUi()
@@ -81,6 +95,8 @@ class WebDavBrowserFragment : BaseFragment<FragmentWebDavBrowserBinding>(), OnBa
     override fun onDestroyView() {
         loadJob?.cancel()
         loadJob = null
+        coverJob?.cancel()
+        coverJob = null
         scope.cancel()
         super.onDestroyView()
     }
@@ -91,6 +107,7 @@ class WebDavBrowserFragment : BaseFragment<FragmentWebDavBrowserBinding>(), OnBa
         val config = WebDavConfigStore.load(appSettings)
         if (config == null) {
             client = null
+            adapter.coverHeaders = emptyMap()
             folderStack.clear()
             adapter.setData(emptyList())
             binding.recyclerView.visibility = View.INVISIBLE
@@ -106,6 +123,7 @@ class WebDavBrowserFragment : BaseFragment<FragmentWebDavBrowserBinding>(), OnBa
             return
         }
         client = WebDavClient(config)
+        adapter.coverHeaders = buildCoverHeaders(config)
         folderStack.clear()
         folderStack.add(config.baseUrl)
         updatePathLabel()
@@ -130,6 +148,7 @@ class WebDavBrowserFragment : BaseFragment<FragmentWebDavBrowserBinding>(), OnBa
     private fun loadFolder(url: HttpUrl, clearList: Boolean) {
         val client = client ?: return
         loadJob?.cancel()
+        coverJob?.cancel()
         binding.progressBar.visibility = View.VISIBLE
         binding.textStatus.visibility = View.GONE
         if (clearList) {
@@ -143,6 +162,7 @@ class WebDavBrowserFragment : BaseFragment<FragmentWebDavBrowserBinding>(), OnBa
                 binding.progressBar.visibility = View.GONE
                 binding.recyclerView.visibility = View.VISIBLE
                 adapter.setData(entries)
+                probeFolderCovers(entries)
                 if (entries.isEmpty()) {
                     binding.recyclerView.visibility = View.INVISIBLE
                     showStatus(getString(R.string.webdav_empty_dir))
@@ -160,6 +180,36 @@ class WebDavBrowserFragment : BaseFragment<FragmentWebDavBrowserBinding>(), OnBa
                 binding.buttonSettings.requestFocus()
             }
         }
+    }
+
+    /**
+     * 列表先展示，再并发探测文件夹封面（固定 poster.jpg）。
+     * 探测结果只更新对应卡片，不重建整个列表。
+     */
+    private fun probeFolderCovers(entries: List<WebDavEntry>) {
+        coverJob?.cancel()
+        val client = client ?: return
+        val folders = entries.filter { it.isDirectory && it.coverUrl == null }
+        if (folders.isEmpty()) return
+        coverJob = scope.launch {
+            val tasks = folders.map { folder ->
+                async(Dispatchers.IO) { folder.url to client.probeFolderCover(folder.url) }
+            }
+            tasks.forEach { task ->
+                val (folderUrl, coverUrl) = task.await()
+                if (view == null) return@launch
+                if (coverUrl != null) {
+                    binding.recyclerView.post { adapter.setCover(folderUrl, coverUrl) }
+                }
+            }
+        }
+    }
+
+    private fun buildCoverHeaders(config: WebDavConfig): Map<String, String> {
+        if (config.username.isBlank()) return emptyMap()
+        return mapOf(
+            "Authorization" to Credentials.basic(config.username, config.password, Charsets.UTF_8)
+        )
     }
 
     private fun focusFirstEntry(attempt: Int = 0) {

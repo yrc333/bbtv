@@ -1,6 +1,8 @@
 # MyTVB
 
-📺 一个专为 Android TV 设计的第三方 Bilibili 客户端，同时适配手机、平板与车机触屏，像素级对齐 BLBL。
+📺 一个专为 Android TV 设计的第三方 Bilibili 客户端，同时适配手机、平板与车机触屏，像素级对齐 BLBL,fork自MyTVB。
+
+> 当前版本：**v2.2.1**
 
 ## ✨ 主要功能
 
@@ -18,6 +20,7 @@
 - 🌏 **多语言** - 简体中文 / 繁體中文 / English
 - 🖥️ **界面缩放** - 缩放、文字、卡片大小可调；特殊分辨率自动适配
 - 🎚️ **播放设置** - 画质 / 音质 / 倍速 / 编码、无缝清晰度、音量均衡、字幕三态
+- 🗂️ **WebDAV 媒体库** - 配置 WebDAV 服务器后直接浏览并播放其中的视频；横版 3:2 海报墙自动读取文件夹内的 `poster.jpg`，支持边下边播、拖动进度与断点续播
 
 ## 💡 小技巧
 
@@ -41,22 +44,12 @@
 - **Coroutines + Flow + LiveData** 异步
 - **Retrofit + OkHttp + Gson** 网络层
 - **Media3 (ExoPlayer)** 视频播放（电视直播走 WebView，可选腾讯 X5 内核）
+- **WebDAV** 自建轻量客户端（OkHttp + PROPFIND/XML 解析），复用 Media3 与播放缓存实现流式播放
 - **弹幕引擎**（Protobuf 协议解析）
 - **DataStore Preferences** 数据存储
 - **三语国际化**（简体中文 / 繁體中文 / English）
 - **AndroidX** UI 组件
 - **minSdk 23 (Android 6.0)** / **targetSdk 35 (Android 15)**
-
-## 📷 APP 截图
-
-主界面
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/b746a1dd-8243-4378-a1ea-c023460323b7" />
-
-播放 & 弹幕
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4a0199e0-64a0-4762-9d45-8ec2ff58524a" />
-
-屏蔽功能
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/cae6be14-85cb-41e0-bfee-098214ffbb43" />
 
 ## 🙏 感谢
 

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/cell_background"
+    android:clickable="true"
+    android:focusable="true"
+    android:padding="@dimen/px14">
+
+    <FrameLayout
+        android:id="@+id/cover_container"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/web_dav_cover_placeholder_bg"
+        app:layout_constraintDimensionRatio="H,3:2"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/image_cover"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/icon_placeholder"
+            android:layout_width="@dimen/px60"
+            android:layout_height="@dimen/px60"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_webdav_folder"
+            app:tint="?android:attr/textColorSecondary" />
+    </FrameLayout>
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/text_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px12"
+        android:ellipsize="end"
+        android:lines="2"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="@dimen/px28"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/cover_container" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/text_meta"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px6"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px22"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/text_name" />
+</androidx.constraintlayout.widget.ConstraintLayout>

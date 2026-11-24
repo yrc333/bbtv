@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/dialog_background"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/px50"
+    android:paddingTop="@dimen/px40"
+    android:paddingEnd="@dimen/px50"
+    android:paddingBottom="@dimen/px40">
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/webdav_server_settings"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="@dimen/px36"
+        android:textStyle="bold" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px24"
+        android:text="@string/webdav_server_url"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px26" />
+
+    <androidx.appcompat.widget.AppCompatEditText
+        android:id="@+id/edit_url"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px10"
+        android:background="@drawable/cell_background"
+        android:focusable="true"
+        android:hint="@string/webdav_server_url_hint"
+        android:imeOptions="actionNext"
+        android:inputType="textUri"
+        android:maxLines="1"
+        android:padding="@dimen/px20"
+        android:singleLine="true"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textColorHint="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px28" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px20"
+        android:text="@string/webdav_username"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px26" />
+
+    <androidx.appcompat.widget.AppCompatEditText
+        android:id="@+id/edit_username"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px10"
+        android:background="@drawable/cell_background"
+        android:focusable="true"
+        android:imeOptions="actionNext"
+        android:inputType="text"
+        android:maxLines="1"
+        android:padding="@dimen/px20"
+        android:singleLine="true"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textColorHint="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px28" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px20"
+        android:text="@string/webdav_password"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px26" />
+
+    <androidx.appcompat.widget.AppCompatEditText
+        android:id="@+id/edit_password"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px10"
+        android:background="@drawable/cell_background"
+        android:focusable="true"
+        android:imeOptions="actionDone"
+        android:inputType="textPassword"
+        android:maxLines="1"
+        android:padding="@dimen/px20"
+        android:singleLine="true"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textColorHint="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px28" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px20"
+        android:lineSpacingMultiplier="1.3"
+        android:text="@string/webdav_config_hint"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px22" />
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/px30"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/button_cancel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_menu_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:paddingStart="@dimen/px50"
+            android:paddingTop="@dimen/px16"
+            android:paddingEnd="@dimen/px50"
+            android:paddingBottom="@dimen/px16"
+            android:text="@string/cancel"
+            android:textColor="@color/pink"
+            android:textSize="@dimen/px28"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/button_save"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/px20"
+            android:background="@drawable/bg_menu_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:paddingStart="@dimen/px50"
+            android:paddingTop="@dimen/px16"
+            android:paddingEnd="@dimen/px50"
+            android:paddingBottom="@dimen/px16"
+            android:text="@string/confirm"
+            android:textColor="@color/pink"
+            android:textSize="@dimen/px28"
+            android:textStyle="bold" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+</androidx.appcompat.widget.LinearLayoutCompat>

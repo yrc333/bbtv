@@ -1,0 +1,395 @@
+@file:Suppress("SpellCheckingInspection")
+
+package com.mytvb.core.common.media
+
+import android.content.Context
+import android.content.res.Configuration
+import android.hardware.display.DisplayManager
+import android.media.MediaCodecInfo
+import android.media.MediaCodecList
+import android.os.Build
+import android.view.Display
+import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.Format
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.RendererCapabilities
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
+import com.mytvb.core.common.log.AppLog
+import com.mytvb.model.video.quality.VideoCodecEnum
+
+object VideoCodecSupport {
+
+    private const val TAG = "VideoCodecSupport"
+
+    @Volatile
+    private var cachedHardwareCodecs: Set<VideoCodecEnum>? = null
+
+    @Volatile
+    private var cachedHdrSupported: Boolean? = null
+
+    @Volatile
+    private var cachedDolbyVisionSupported: Boolean? = null
+
+    private val codecPriorityOrder = listOf(
+        VideoCodecEnum.AV1,
+        VideoCodecEnum.HEVC,
+        VideoCodecEnum.AVC
+    )
+
+    private val softwareFallbackPriorityOrder = listOf(
+        VideoCodecEnum.AVC,
+        VideoCodecEnum.HEVC,
+        VideoCodecEnum.AV1
+    )
+
+    fun getHardwareSupportedCodecs(): Set<VideoCodecEnum> {
+        cachedHardwareCodecs?.let { return it }
+        if (isEmulatorLikeDevice()) {
+            cachedHardwareCodecs = emptySet()
+            return emptySet()
+        }
+        val result = runCatching {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                .asSequence()
+                .filter { !it.isEncoder }
+                .filter(::isHardwareDecoder)
+                .flatMap { info ->
+                    info.supportedTypes
+                        .asSequence()
+                        .mapNotNull(::codecFromMimeType)
+                }
+                .toSet()
+        }.getOrDefault(emptySet())
+        cachedHardwareCodecs = result
+        return result
+    }
+
+    private fun isEmulatorLikeDevice(): Boolean {
+        val fingerprint = Build.FINGERPRINT.lowercase()
+        val board = Build.BOARD.lowercase()
+        val brand = Build.BRAND.lowercase()
+        val device = Build.DEVICE.lowercase()
+        val model = Build.MODEL.lowercase()
+        val product = Build.PRODUCT.lowercase()
+        val hardware = Build.HARDWARE.lowercase()
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val abiSummary = Build.SUPPORTED_ABIS.joinToString("|").lowercase()
+        return fingerprint.startsWith("generic") ||
+            fingerprint.contains("vbox") ||
+            fingerprint.contains("test-keys") && (hardware.contains("goldfish") || hardware.contains("ranchu")) ||
+            board.contains("goldfish") ||
+            board.contains("ranchu") ||
+            brand.startsWith("generic") ||
+            device.contains("generic") ||
+            device.contains("emulator") ||
+            device.contains("ranchu") ||
+            model.contains("emulator") ||
+            model.contains("android sdk built for") ||
+            product.contains("sdk") ||
+            product.contains("emulator") ||
+            product.contains("vbox") ||
+            hardware.contains("goldfish") ||
+            hardware.contains("ranchu") ||
+            hardware.contains("vbox") ||
+            abiSummary.contains("x86") && (
+                fingerprint.contains("generic") ||
+                    brand.startsWith("generic") ||
+                    product.contains("sdk") ||
+                    product.contains("emulator") ||
+                    hardware.contains("ranchu") ||
+                    hardware.contains("goldfish")
+                ) ||
+            manufacturer.contains("genymotion")
+    }
+
+    fun buildSupportSummary(supportedCodecs: Collection<VideoCodecEnum>): String {
+        val supported = supportedCodecs.toSet()
+        return codecPriorityOrder.joinToString("  ") { codec ->
+            if (codec in supported) "✓${codec.name}" else "✗${codec.name}"
+        }
+    }
+
+    fun orderCandidates(
+        availableCodecs: Collection<VideoCodecEnum>,
+        preferredCodec: VideoCodecEnum?,
+        hardwareSupportedCodecs: Collection<VideoCodecEnum>
+    ): List<VideoCodecEnum> {
+        val uniqueAvailable = availableCodecs.toSet()
+        if (uniqueAvailable.isEmpty()) {
+            return emptyList()
+        }
+
+        val hardwareSupported = hardwareSupportedCodecs.toSet()
+        val hardwarePreferredCodec = preferredCodec
+            ?.takeIf { it in uniqueAvailable && it in hardwareSupported }
+
+        return orderByHardwareThenPriority(
+            codecs = uniqueAvailable,
+            hardwareSupportedCodecs = hardwareSupported,
+            preferredHardwareCodec = hardwarePreferredCodec
+        )
+    }
+
+    private fun orderByHardwareThenPriority(
+        codecs: Set<VideoCodecEnum>,
+        hardwareSupportedCodecs: Collection<VideoCodecEnum>,
+        preferredHardwareCodec: VideoCodecEnum?
+    ): List<VideoCodecEnum> {
+        if (codecs.isEmpty()) return emptyList()
+
+        val hardwareSupported = hardwareSupportedCodecs.toSet()
+        val hardwareAvailable = codecs.filterTo(linkedSetOf()) { it in hardwareSupported }
+        val softwareFallback = codecs.filterTo(linkedSetOf()) { it !in hardwareAvailable }
+
+        return if (hardwareAvailable.isNotEmpty()) {
+            orderWithinTier(hardwareAvailable, preferredHardwareCodec, codecPriorityOrder) +
+                orderWithinTier(softwareFallback, null, softwareFallbackPriorityOrder)
+        } else {
+            orderWithinTier(codecs, null, softwareFallbackPriorityOrder)
+        }
+    }
+
+    private fun orderWithinTier(
+        availableCodecs: Collection<VideoCodecEnum>,
+        preferredCodec: VideoCodecEnum?,
+        priorityOrder: List<VideoCodecEnum>
+    ): List<VideoCodecEnum> {
+        val available = availableCodecs.toSet()
+        return buildList {
+            preferredCodec
+                ?.takeIf { it in available }
+                ?.let(::add)
+            priorityOrder
+                .filter { it in available && it !in this }
+                .forEach(::add)
+            available
+                .filter { it !in this }
+                .sortedBy { codecPriority(it, priorityOrder) }
+                .forEach(::add)
+        }
+    }
+
+    private fun codecFromMimeType(mimeType: String): VideoCodecEnum? {
+        return when (mimeType.lowercase()) {
+            "video/av01" -> VideoCodecEnum.AV1
+            "video/hevc" -> VideoCodecEnum.HEVC
+            "video/avc" -> VideoCodecEnum.AVC
+            else -> null
+        }
+    }
+
+    /** 是否硬件解码器（编解码信息页亦复用此判定）。 */
+    internal fun isHardwareDecoder(info: MediaCodecInfo): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return info.isHardwareAccelerated && !info.isSoftwareOnly && !info.isAlias
+        }
+
+        val codecName = info.name.lowercase()
+        return when {
+            codecName.startsWith("omx.google.") -> false
+            codecName.startsWith("c2.android.") -> false
+            codecName.startsWith("c2.google.") -> false
+            codecName.contains(".sw.") -> false
+            codecName.contains("software") -> false
+            codecName.contains("ffmpeg") -> false
+            else -> codecName.startsWith("omx.") || codecName.startsWith("c2.")
+        }
+    }
+
+    private fun codecPriority(codec: VideoCodecEnum, priorityOrder: List<VideoCodecEnum>): Int {
+        return priorityOrder.indexOf(codec).takeIf { it >= 0 } ?: Int.MAX_VALUE
+    }
+
+    // ===== 解码方式（硬解优先 / 软解）与起播能力预检 =====
+
+    /**
+     * 软解偏好数据源：由外层（Application 启动）注册为「读全局设置开关」的 lambda。
+     * core 层经此读取开关而无需依赖设置模块；未注册时默认硬解优先。
+     */
+    @Volatile
+    var softwareDecoderPreferenceSource: (() -> Boolean)? = null
+
+    fun isSoftwareDecoderPreferred(): Boolean =
+        softwareDecoderPreferenceSource?.invoke() ?: false
+
+    /**
+     * 当前生效的视频解码器选择器。
+     *
+     * 软解开关打开时仅对视频流（video 前缀 MIME）采用 [MediaCodecSelector.PREFER_SOFTWARE]
+     * （软解优先，初始化失败仍按排序回退硬解——渲染工厂已开 setEnableDecoderFallback）；
+     * 音频与其余场景保持 media3 默认（硬解优先）。
+     *
+     * 每次解码器选择（起播/换轨/重建）都会实时询问本 selector，读开关即时生效。
+     * 播放侧（PlayerInstancePool）与能力预检（[isVideoTrackDecodable]）共用同一入口，
+     * 保证「判定与选择一致」，避免预检判可解、播放却落到不同解码器。
+     */
+    @OptIn(UnstableApi::class)
+    fun videoCodecSelector(): MediaCodecSelector =
+        MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+            val selector = if (mimeType.lowercase().startsWith("video/") && isSoftwareDecoderPreferred()) {
+                MediaCodecSelector.PREFER_SOFTWARE
+            } else {
+                MediaCodecSelector.DEFAULT
+            }
+            selector.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+        }
+
+    /**
+     * 该视频轨本机能否解码——复用 media3 [MediaCodecVideoRenderer.supportsFormat] 全规格判定
+     * （mime/profile/level/尺寸×帧率），与播放实际选码策略同语义。
+     *
+     * 判定口径：仅 `FORMAT_UNSUPPORTED_*` 系列视为不可解码；`FORMAT_EXCEEDS_CAPABILITIES`
+     * （超过申报能力但仍可处理，渲染器可解码/丢帧降级）与 `FORMAT_HANDLED` 都按可解码处理。
+     * 保守取向：mime/尺寸元数据缺失或查询异常时返回 true，避免误伤正常播放。
+     */
+    @OptIn(UnstableApi::class)
+    fun isVideoTrackDecodable(
+        context: Context,
+        mimeType: String?,
+        codecs: String?,
+        width: Int,
+        height: Int,
+        frameRate: Float
+    ): Boolean {
+        if (mimeType.isNullOrBlank() || width <= 0 || height <= 0) {
+            return true
+        }
+        return runCatching {
+            // B 站 DASH 的 mimeType 字段常为容器级 video/mp4，真正编解码类型在 codecs 串
+            // （avc1.x→video/avc、hvc1/hev1→video/hevc、av01→video/av01），按 codecs 优先解析。
+            val resolvedMime = resolveVideoMime(mimeType, codecs)
+            val format = Format.Builder()
+                .setSampleMimeType(resolvedMime)
+                .setWidth(width)
+                .setHeight(height)
+                .apply { if (!codecs.isNullOrBlank()) setCodecs(codecs) }
+                .apply { if (frameRate > 0f) setFrameRate(frameRate) }
+                .build()
+            val support = MediaCodecVideoRenderer.supportsFormat(context, videoCodecSelector(), format)
+            val formatSupport = support and RendererCapabilities.FORMAT_SUPPORT_MASK
+            val decodable = formatSupport >= C.FORMAT_EXCEEDS_CAPABILITIES
+            AppLog.i(
+                TAG,
+                "capability_probe mime=$resolvedMime ${width}x${height} fps=$frameRate codecs=$codecs " +
+                    "support=$support formatSupport=$formatSupport decodable=$decodable"
+            )
+            decodable
+        }.getOrDefault(true)
+    }
+
+    /** 从 codecs 串（RFC 6381）解析具体视频 MIME；无法识别时回退传入值。 */
+    private fun resolveVideoMime(mimeType: String, codecs: String?): String {
+        val c = codecs?.lowercase().orEmpty()
+        return when {
+            c.startsWith("avc1") || c.startsWith("avc3") -> "video/avc"
+            c.startsWith("hvc1") || c.startsWith("hev1") -> "video/hevc"
+            c.startsWith("av01") -> "video/av01"
+            c.startsWith("dvh1") || c.startsWith("dvhe") || c.startsWith("dav1") -> "video/dolby-vision"
+            else -> mimeType
+        }
+    }
+
+    /**
+     * 设备感知的默认视频编码（仅作为用户「未显式设置过」时的默认值，手动选择永远优先）。
+     *
+     * 疑似 MTK 电视芯片的设备默认 AVC：MTK 电视 SoC 的 HEVC 硬解存在「初始化成功但输出
+     * 坏帧（花屏）」类设备缺陷（androidx/media#2765 同类），且花屏无错误回调、任何自动
+     * 降级都无法感知，默认避开 HEVC 走兼容性最好的 H.264；其余设备保持 HEVC。
+     */
+    fun defaultPreferredCodec(context: Context): VideoCodecEnum {
+        cachedDefaultCodec?.let { return it }
+        val result = if (isSuspectMediatekTvDevice(context)) {
+            VideoCodecEnum.AVC
+        } else {
+            VideoCodecEnum.HEVC
+        }
+        cachedDefaultCodec = result
+        return result
+    }
+
+    @Volatile
+    private var cachedDefaultCodec: VideoCodecEnum? = null
+
+    /** MTK 电视芯片特征：mt96xx/mt58xx/mt59xx 等 SoC 命名或厂商字段含 mediatek。 */
+    private val mediatekChipPattern = Regex("(^|[| _\\-/])mt\\d{4}")
+
+    private fun isSuspectMediatekTvDevice(context: Context): Boolean {
+        val isTv = (context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) ==
+            Configuration.UI_MODE_TYPE_TELEVISION
+        if (!isTv) return false
+        val markers = buildString {
+            append(Build.HARDWARE).append('|')
+            append(Build.BOARD).append('|')
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                append(Build.SOC_MODEL).append('|')
+                append(Build.SOC_MANUFACTURER)
+            }
+        }.lowercase()
+        if (markers.contains("mediatek")) return true
+        return mediatekChipPattern.containsMatchIn(markers)
+    }
+
+    @Suppress("unused")
+    fun isHdrSupported(context: Context? = null): Boolean {
+        cachedHdrSupported?.let { return it }
+        val decoderOk = hasDecoder("video/hevc")
+        if (!decoderOk) {
+            cachedHdrSupported = false
+            return false
+        }
+        if (context == null) {
+            return true
+        }
+        val result = hasHdrDisplaySupport(context)
+        cachedHdrSupported = result
+        return result
+    }
+
+    @Suppress("unused")
+    fun isDolbyVisionSupported(context: Context? = null): Boolean {
+        cachedDolbyVisionSupported?.let { return it }
+        val decoderOk = hasDecoder("video/dolby-vision") ||
+            hasDecoder("video/dvhe") ||
+            hasDecoder("video/dvav")
+        if (!decoderOk) {
+            cachedDolbyVisionSupported = false
+            return false
+        }
+        if (context == null) {
+            return true
+        }
+        val result = hasDolbyVisionDisplaySupport(context)
+        cachedDolbyVisionSupported = result
+        return result
+    }
+
+    private fun hasDecoder(mimeType: String): Boolean {
+        return runCatching {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                .any { !it.isEncoder && mimeType.lowercase() in it.supportedTypes.map { t -> t.lowercase() } }
+        }.getOrDefault(false)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hasHdrDisplaySupport(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        val display = getDisplay(context) ?: return false
+        val hdrCaps = display.hdrCapabilities ?: return false
+        return hdrCaps.supportedHdrTypes.isNotEmpty()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hasDolbyVisionDisplaySupport(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        val display = getDisplay(context) ?: return false
+        val hdrCaps = display.hdrCapabilities ?: return false
+        return hdrCaps.supportedHdrTypes.contains(Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION)
+    }
+
+    private fun getDisplay(context: Context): Display? {
+        val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return null
+        return dm.getDisplay(Display.DEFAULT_DISPLAY)
+    }
+}

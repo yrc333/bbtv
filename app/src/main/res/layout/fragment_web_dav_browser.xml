@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/backgroundColor">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/button_back"
+        android:layout_width="@dimen/px100"
+        android:layout_height="@dimen/px100"
+        android:layout_marginStart="@dimen/px20"
+        android:layout_marginTop="@dimen/px25"
+        android:background="@drawable/cell_background"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="@dimen/px30"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:srcCompat="@drawable/ic_back"
+        app:tint="?android:attr/textColorPrimary" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/text_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/px24"
+        android:layout_marginEnd="@dimen/px24"
+        android:text="@string/webdav"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="@dimen/px40"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="@id/button_back"
+        app:layout_constraintEnd_toStartOf="@id/button_settings"
+        app:layout_constraintStart_toEndOf="@id/button_back"
+        app:layout_constraintTop_toTopOf="@id/button_back" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/button_settings"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="@dimen/px20"
+        android:background="@drawable/cell_background"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingStart="@dimen/px30"
+        android:paddingTop="@dimen/px16"
+        android:paddingEnd="@dimen/px30"
+        android:paddingBottom="@dimen/px16"
+        android:text="@string/webdav_server_settings"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="@dimen/px28"
+        app:layout_constraintBottom_toBottomOf="@id/button_back"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/button_back" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/text_path"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/px24"
+        android:layout_marginTop="@dimen/px16"
+        android:layout_marginEnd="@dimen/px24"
+        android:ellipsize="start"
+        android:maxLines="1"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px24"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/button_back" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler_view"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/px16"
+        android:clipToPadding="false"
+        android:paddingTop="@dimen/px10"
+        android:paddingBottom="@dimen/px40"
+        android:scrollbars="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/text_path" />
+
+    <ProgressBar
+        android:id="@+id/progress_bar"
+        android:layout_width="@dimen/px100"
+        android:layout_height="@dimen/px100"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/text_path" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/text_status"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/px60"
+        android:layout_marginEnd="@dimen/px60"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.3"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="@dimen/px28"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/text_path" />
+</androidx.constraintlayout.widget.ConstraintLayout>

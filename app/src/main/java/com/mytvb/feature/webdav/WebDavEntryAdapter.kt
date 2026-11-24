@@ -10,7 +10,6 @@ import com.mytvb.core.ui.base.BaseAdapter
 import com.mytvb.databinding.ItemWebDavGridBinding
 import java.text.SimpleDateFormat
 import java.util.Locale
-import okhttp3.HttpUrl
 
 class WebDavEntryAdapter(
     private val onClick: (WebDavEntry) -> Unit
@@ -24,9 +23,6 @@ class WebDavEntryAdapter(
 
     /** WebDAV 封面需要 Basic 认证头，由页面在配置变化时更新。 */
     var coverHeaders: Map<String, String> = emptyMap()
-
-    /** 列表 diff 尚未提交时先到达的封面，绑定时兜底使用。 */
-    private val pendingCovers = mutableMapOf<String, HttpUrl>()
 
     init {
         setShowLoadMore(false)
@@ -47,17 +43,6 @@ class WebDavEntryAdapter(
         holder.bind(entry)
     }
 
-    /** 文件夹封面探测完成后，按目录地址原地更新对应卡片。 */
-    fun setCover(folderUrl: HttpUrl, coverUrl: HttpUrl) {
-        pendingCovers[folderUrl.toString()] = coverUrl
-        val index = items.indexOfFirst { it.url == folderUrl }
-        if (index < 0) return
-        val entry = items[index]
-        if (entry.coverUrl != null) return
-        items[index] = entry.copy(coverUrl = coverUrl)
-        notifyItemChanged(index)
-    }
-
     inner class ViewHolder(
         private val binding: ItemWebDavGridBinding
     ) : RecyclerView.ViewHolder(binding.root) {
@@ -74,7 +59,7 @@ class WebDavEntryAdapter(
             binding.textMeta.text = buildMeta(binding.root.context, entry)
             binding.root.setOnClickListener { onClick(entry) }
 
-            val coverUrl = entry.coverUrl ?: pendingCovers[entry.url.toString()] ?: return
+            val coverUrl = entry.coverUrl ?: return
             WebDavCoverLoader.load(
                 imageView = binding.imageCover,
                 url = coverUrl.toString(),

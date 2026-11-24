@@ -5,11 +5,8 @@ import com.mytvb.core.common.log.AppLog
 import java.io.IOException
 import java.io.StringReader
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
 import okhttp3.HttpUrl
@@ -24,7 +21,7 @@ import org.xmlpull.v1.XmlPullParser
 class WebDavHttpException(val code: Int) : IOException("HTTP $code")
 
 /**
- * 极简 WebDAV 客户端：PROPFIND 目录列举 + 固定 poster.jpg 封面探测。
+ * 极简 WebDAV 客户端：PROPFIND 目录列举，并从同目录图片中解析封面。
  * 播放由 ExoPlayer + OkHttpDataSource 直接请求视频 URL 完成。
  */
 class WebDavClient(private val config: WebDavConfig) {
@@ -60,12 +57,6 @@ class WebDavClient(private val config: WebDavConfig) {
             "folder.jpg", "folder.png", "folder.webp",
             "thumb.jpg", "thumb.png", "thumb.webp"
         )
-
-        /** 文件夹封面固定探测这个文件名（B 方案）。 */
-        private const val FOLDER_COVER_NAME = "poster.jpg"
-
-        /** 文件夹封面探测的最大并发数，避免一屏目录打出几十个请求。 */
-        private const val COVER_PROBE_CONCURRENCY = 4
     }
 
     private data class RawEntry(
@@ -76,7 +67,11 @@ class WebDavClient(private val config: WebDavConfig) {
         val sizeBytes: Long,
         val lastModified: String?
     ) {
-        fun baseName(): String = fileName.substringBeforeLast('.').lowercase(Locale.ROOT)
+        fun baseName(): String {
+            // 目录名可能自带点（如 Movie.2024），不能按扩展名截断。
+            val raw = if (isDirectory) fileName else fileName.substringBeforeLast('.', fileName)
+            return raw.lowercase(Locale.ROOT)
+        }
 
         fun extension(): String = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
 
@@ -89,10 +84,6 @@ class WebDavClient(private val config: WebDavConfig) {
             coverUrl = coverUrl
         )
     }
-
-    /** key -> 封面地址；空串表示已探测过、确认没有封面。 */
-    private val folderCoverCache = ConcurrentHashMap<String, String>()
-    private val coverProbeSemaphore = Semaphore(COVER_PROBE_CONCURRENCY)
 
     suspend fun list(folder: HttpUrl): List<WebDavEntry> = withContext(Dispatchers.IO) {
         val request = authorizedBuilder(folder)
@@ -109,27 +100,6 @@ class WebDavClient(private val config: WebDavConfig) {
             }
             val body = response.body?.string().orEmpty()
             assembleEntries(request.url, body)
-        }
-    }
-
-    /**
-     * 探测文件夹内是否存在 poster.jpg。结果进程内缓存（含"不存在"），
-     * 由界面在列表展示后并发调用，避免拖慢首屏。
-     */
-    suspend fun probeFolderCover(folderUrl: HttpUrl): HttpUrl? = withContext(Dispatchers.IO) {
-        val key = folderUrl.toString()
-        val cached = folderCoverCache[key]
-        if (cached != null) return@withContext cached.toHttpUrlOrNull()
-
-        coverProbeSemaphore.withPermit {
-            val rechecked = folderCoverCache[key]
-            if (rechecked != null) return@withPermit rechecked.toHttpUrlOrNull()
-
-            val candidate = buildFolderCoverUrl(folderUrl)
-            val exists = candidate != null && runCatching { head(candidate) }.getOrDefault(false)
-            val result = if (exists) candidate else null
-            folderCoverCache[key] = result?.toString().orEmpty()
-            return@withPermit result
         }
     }
 
@@ -151,7 +121,11 @@ class WebDavClient(private val config: WebDavConfig) {
         }
 
         val entries = ArrayList<WebDavEntry>(directories.size + videos.size)
-        directories.forEach { entries.add(it.toEntry(null)) }
+        directories.forEach { directory ->
+            // 文件夹封面：同目录下与文件夹同名的图片（如「电影A」→「电影A.jpg」）。
+            val coverUrl = imageByBaseName[directory.baseName()]?.url
+            entries.add(directory.toEntry(coverUrl))
+        }
         videos.forEach { video ->
             val coverUrl = imageByBaseName[video.baseName()]?.url ?: directoryPoster?.url
             entries.add(video.toEntry(coverUrl))
@@ -244,34 +218,6 @@ class WebDavClient(private val config: WebDavConfig) {
         }
     }
 
-    private fun buildFolderCoverUrl(folderUrl: HttpUrl): HttpUrl? {
-        val text = folderUrl.toString()
-        val base = if (text.endsWith("/")) text else "$text/"
-        return (base + FOLDER_COVER_NAME).toHttpUrlOrNull()
-    }
-
-    private fun head(url: HttpUrl): Boolean {
-        val request = authorizedBuilder(url).head().build()
-        WebDavHttp.coverClient.newCall(request).execute().use { response ->
-            if (response.isSuccessful) return true
-            // 少数服务器不支持 HEAD，用 0 字节 Range GET 兜底。
-            if (response.code == 405) return probeByRange(url)
-            return false
-        }
-    }
-
-    private fun probeByRange(url: HttpUrl): Boolean {
-        val request = authorizedBuilder(url)
-            .header("Range", "bytes=0-0")
-            .get()
-            .build()
-        return runCatching {
-            WebDavHttp.coverClient.newCall(request).execute().use {
-                it.code == 200 || it.code == 206
-            }
-        }.getOrDefault(false)
-    }
-
     private fun tagName(parser: XmlPullParser): String {
         // Android 的 XmlPullParser stub 未暴露 getLocalName，直接用带前缀的名字去掉前缀。
         return parser.name.substringAfter(':').lowercase(Locale.ROOT)
@@ -311,7 +257,7 @@ object WebDavHttp {
             .build()
     }
 
-    /** 封面探测/下载专用：短超时，避免个别目录把首屏拖住。 */
+    /** 封面下载专用：短超时，避免个别封面拖住列表。 */
     val coverClient: OkHttpClient by lazy {
         client.newBuilder()
             .callTimeout(10, TimeUnit.SECONDS)
